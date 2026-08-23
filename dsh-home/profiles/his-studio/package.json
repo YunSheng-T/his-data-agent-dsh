@@ -1,0 +1,19 @@
+{
+  "name": "dsh-profile-his-studio",
+  "private": true,
+  "dependencies": {
+    "@his/domain-tools-modeling": "link:../../../packages/domain-tools-modeling",
+    "@his/approval-policy": "link:../../../packages/approval-policy",
+    "@his/workspace-anchor": "link:../../../packages/workspace-anchor",
+    "@his/workspace-repo": "link:../../../packages/workspace-repo",
+    "@his/domain-tools-dev": "link:../../../packages/domain-tools-dev",
+    "@his/studio-ui": "link:../../../packages/studio-ui"
+  },
+  "dsh": {
+    "profile": {
+      "bundles": [
+        "@deepseek-ai/dsh-base"
+      ]
+    }
+  }
+}

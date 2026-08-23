@@ -1,0 +1,28 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: false
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      '@his/approval-policy':
+        specifier: link:../../../packages/approval-policy
+        version: link:../../../packages/approval-policy
+      '@his/domain-tools-dev':
+        specifier: link:../../../packages/domain-tools-dev
+        version: link:../../../packages/domain-tools-dev
+      '@his/domain-tools-modeling':
+        specifier: link:../../../packages/domain-tools-modeling
+        version: link:../../../packages/domain-tools-modeling
+      '@his/studio-ui':
+        specifier: link:../../../packages/studio-ui
+        version: link:../../../packages/studio-ui
+      '@his/workspace-anchor':
+        specifier: link:../../../packages/workspace-anchor
+        version: link:../../../packages/workspace-anchor
+      '@his/workspace-repo':
+        specifier: link:../../../packages/workspace-repo
+        version: link:../../../packages/workspace-repo

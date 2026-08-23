@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HIS Data Agent · 数据工作台</title>
+<style>
+:root{
+  --paper:#f2efeb; --paper-deep:#e9e5de;
+  --ink:#0b0b0b; --muted:#6d6a64; --faint:#a8a49c;
+  --hair:rgba(11,11,11,.12); --hair-soft:rgba(11,11,11,.07);
+  --term-bg:#0b0b0b; --term-green:#4ade80; --term-dim:#4d7a4d;
+  --ok:#1f8a4c; --warn:#9a6a14; --err:#b02a44;
+  --sans:Inter,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+  --mono:"JetBrains Mono","SF Mono",Menlo,Consolas,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{font-family:var(--sans);font-size:13px;line-height:1.6;color:var(--ink);background:var(--paper);overflow:hidden}
+button{font-family:inherit;cursor:pointer;background:none;border:none;color:inherit}
+input,textarea,select{font-family:inherit}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-thumb{background:rgba(11,11,11,.16);border-radius:4px}
+::-webkit-scrollbar-track{background:transparent}
+.mono{font-family:var(--mono)}
+
+.tlabel{display:inline-block;font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);padding:2px 8px;border:1px solid var(--hair);border-radius:99px;white-space:nowrap}
+.tlabel.green{color:#0a7a34;border-color:rgba(10,122,52,.35)}
+.tlabel.warn{color:var(--warn);border-color:rgba(154,106,20,.4)}
+
+/* 顶栏 */
+.topbar{height:48px;display:flex;align-items:center;padding:0 18px;gap:14px;border-bottom:1px solid var(--hair)}
+.wordmark{font-weight:700;font-size:14px}
+.wordmark em{font-style:normal;font-family:var(--mono);font-weight:400;font-size:10px;letter-spacing:.14em;color:var(--muted);margin-left:8px}
+.topbar .vr{width:1px;height:16px;background:var(--hair)}
+.topbar .crumb{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.topbar .right{margin-left:auto;display:flex;gap:10px;align-items:center}
+
+.ide{display:flex;height:calc(100vh - 48px)}
+
+/* 左栏 */
+.left{width:262px;flex:none;border-right:1px solid var(--hair);display:flex;flex-direction:column;min-height:0}
+.menu{padding:12px 12px 8px;border-bottom:1px solid var(--hair-soft)}
+.menu button{display:flex;align-items:center;gap:9px;width:100%;text-align:left;padding:7px 10px;border-radius:7px;font-size:12.5px;color:var(--muted)}
+.menu button.on{background:var(--ink);color:var(--paper)}
+.menu button:not(.on):hover{background:var(--paper-deep);color:var(--ink)}
+.menu button.dim{opacity:.45;pointer-events:none}
+.menu button .m-ico{font-family:var(--mono);font-size:10px;width:16px;text-align:center}
+.dir-head{display:flex;align-items:center;padding:12px 14px 8px}
+.dir-head .tlabel{flex:none}
+.dir-head select{margin-left:auto;font-size:10px;border:1px solid var(--hair);background:#fff;color:var(--ink);max-width:130px;border-radius:6px;padding:2px 4px}
+.model-tree{flex:1;overflow-y:auto;padding:0 10px 12px;min-height:0}
+.tree-domain{margin:6px 0 2px}
+.tree-domain .td-head{display:flex;align-items:center;gap:7px;padding:5px 8px;font-size:11px;color:var(--muted);user-select:none}
+.tree-domain .td-head .cnt{margin-left:auto;font-family:var(--mono);font-size:9.5px;color:var(--faint)}
+.tnode{display:flex;align-items:center;gap:7px;width:100%;text-align:left;padding:5px 8px 5px 16px;border-radius:6px;font-family:var(--mono);font-size:11px;color:#3a382f}
+.tnode:hover{background:var(--paper-deep)}
+.tnode.on{background:var(--ink);color:var(--paper)}
+.tnode .layer{font-size:8.5px;letter-spacing:.08em;border:1px solid var(--hair);border-radius:4px;padding:0 4px;color:var(--muted);flex:none;font-family:var(--sans)}
+.tnode.on .layer{color:rgba(242,239,235,.7);border-color:rgba(242,239,235,.3)}
+.st-dot{width:5px;height:5px;border-radius:50%;margin-left:auto;flex:none}
+.st-dot.pub{background:var(--ok)} .st-dot.draft{background:var(--warn)}
+.dirty-badge{margin-left:auto;font-size:9px;padding:0 4px;border-radius:4px;border:1px solid var(--warn);color:var(--warn);flex:none;font-family:var(--sans)}
+.dirty-badge.new{border-color:var(--ok);color:var(--ok)}
+#audit{border-top:1px solid var(--hair-soft);max-height:26%;display:flex;flex-direction:column;flex:none}
+#audit .dir-head{padding-bottom:4px}
+#audit-body{overflow-y:auto;padding:2px 0 6px}
+.a-row{padding:4px 14px;font-size:11px;border-left:2px solid var(--hair);margin:2px 8px;color:var(--muted)}
+.a-row b{color:var(--ink);font-weight:600}
+.a-row.ok{border-left-color:var(--ok)} .a-row.no{border-left-color:var(--err)}
+.left-foot{border-top:1px solid var(--hair-soft);padding:8px 14px;font-size:11px;color:var(--muted);flex:none}
+.left-foot .row{display:flex;justify-content:space-between;padding:1px 0}
+.left-foot .row span:last-child{font-family:var(--mono);font-size:10px;color:var(--faint)}
+
+/* 中央 */
+.center{flex:1;display:flex;flex-direction:column;min-width:0}
+.file-tabs{display:flex;align-items:flex-end;border-bottom:1px solid var(--hair);padding:0 12px;background:var(--paper-deep);height:38px;flex:none;overflow-x:auto}
+.ftab{display:flex;align-items:center;gap:8px;padding:0 14px;height:32px;font-family:var(--mono);font-size:11px;color:var(--muted);border:1px solid transparent;border-bottom:none;border-radius:8px 8px 0 0;margin-bottom:-1px;cursor:pointer;white-space:nowrap}
+.ftab.on{background:var(--paper);border-color:var(--hair);color:var(--ink)}
+.ftab .fx{color:var(--faint);font-size:12px;padding:0 2px}
+.ftab .fx:hover{color:var(--err)}
+.ftab .dirty{width:6px;height:6px;border-radius:50%;background:var(--warn);flex:none}
+.ws-head{display:flex;align-items:center;gap:12px;padding:12px 20px 0;flex:none}
+.ws-title{font-size:15px;font-weight:700}
+.ws-title .mono{font-size:11px;color:var(--muted);font-weight:400;margin-left:8px}
+.ws-ver{font-family:var(--mono);font-size:10px;color:var(--warn);border:1px solid rgba(154,106,20,.4);border-radius:99px;padding:2px 9px}
+.ws-ver.published{color:var(--ok);border-color:rgba(31,138,76,.4)}
+.sub-tabs{display:flex;gap:2px;padding:10px 20px 0;border-bottom:1px solid var(--hair);flex:none}
+.stab{font-size:12px;color:var(--muted);padding:7px 14px;border-bottom:2px solid transparent;margin-bottom:-1px;cursor:pointer;background:none;border-top:none;border-left:none;border-right:none}
+.stab.on{color:var(--ink);border-bottom-color:var(--ink);font-weight:600}
+.stab:hover{color:var(--ink)}
+.ws-body{flex:1;overflow-y:auto;padding:20px 24px 40px}
+
+.sec-title{font-size:13px;font-weight:700;margin:22px 0 8px;display:flex;align-items:center;gap:10px}
+.sec-title:first-child{margin-top:0}
+.sec-title .tlabel{flex:none}
+.note{font-size:11.5px;color:var(--muted);margin-top:8px}
+
+.attr-table{width:100%;border-collapse:collapse;background:rgba(255,255,255,.45);border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.attr-table th{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);text-align:left;padding:9px 14px;border-bottom:1px solid var(--hair)}
+.attr-table td{padding:9px 14px;border-bottom:1px solid var(--hair-soft);font-size:12px;vertical-align:middle}
+.attr-table tr:last-child td{border-bottom:none}
+.attr-table .fn{font-family:var(--mono);font-size:11.5px;font-weight:600}
+.attr-table .ft{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.pk{font-family:var(--mono);font-size:9px;color:var(--warn);border:1px solid rgba(154,106,20,.4);border-radius:4px;padding:0 4px;margin-left:6px}
+.std-cell{font-family:var(--mono);font-size:11px}
+.std-cell.bound{color:var(--ok)} .std-cell.unbound{color:var(--warn)} .std-cell.skip{color:var(--faint)}
+
+.lint-list{border:1px solid var(--hair);border-radius:10px;overflow:hidden;background:rgba(255,255,255,.45)}
+.lint-row{display:flex;gap:10px;padding:8px 14px;border-bottom:1px solid var(--hair-soft);font-size:12px;align-items:baseline}
+.lint-row:last-child{border-bottom:none}
+.lint-row .lr-st{font-family:var(--mono);flex:none;width:14px}
+.lint-row .lr-st.ok{color:var(--ok)} .lint-row .lr-st.warn{color:var(--warn)} .lint-row .lr-st.err{color:var(--err)}
+.lint-row .lr-note{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--muted);text-align:right}
+
+.er-box{border:1px solid var(--hair);border-radius:10px;background:rgba(255,255,255,.45);padding:18px;overflow-x:auto}
+.ddl-view{background:var(--term-bg);color:#d7dcd2;border-radius:10px;font-family:var(--mono);font-size:11.5px;line-height:1.75;padding:16px 18px;white-space:pre;overflow-x:auto}
+.ddl-view .cm{color:var(--term-green)}
+.ddl-view .an{color:#e8b04b}
+
+.pub-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.pub-card{border:1px solid var(--hair);border-radius:10px;background:rgba(255,255,255,.45);padding:14px 16px}
+.pub-card h4{font-size:12px;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+.pub-state{display:flex;align-items:center;gap:10px;padding:6px 0}
+.pub-state .big{font-size:14px;font-weight:700}
+.pub-state .big.no{color:var(--warn)} .pub-state .big.yes{color:var(--ok)}
+.ver-row{display:flex;gap:10px;padding:6px 0;border-bottom:1px dashed var(--hair-soft);font-size:12px;align-items:baseline}
+.ver-row:last-child{border:none}
+.ver-row .v-no{font-family:var(--mono);font-size:10.5px;color:var(--muted);width:38px;flex:none}
+.ver-row .v-t{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--faint)}
+.btn{padding:6px 14px;border-radius:99px;font-size:11px;font-weight:500;border:1px solid var(--ink)}
+.btn.primary{background:var(--ink);color:var(--paper)}
+.btn.primary:hover{opacity:.82}
+.btn.danger{border-color:var(--err);color:var(--err)}
+
+.jobref{display:flex;gap:8px;align-items:center;font-size:11px;padding:6px 8px;border:1px solid var(--hair);border-radius:6px;margin-top:6px;background:rgba(255,255,255,.45)}
+.jobref .mono{color:var(--muted)}
+
+/* 右栏 · Agent */
+.agent-rail{width:400px;flex:none;border-left:1px solid var(--hair);display:flex;flex-direction:column;min-height:0}
+.anchor-bar{padding:10px 16px;border-bottom:1px solid var(--hair);display:flex;align-items:center;gap:8px;flex:none}
+.anchor-bar .a-dot{width:7px;height:7px;border-radius:50%;background:var(--ink);flex:none}
+.anchor-bar .a-txt{font-size:11px;color:var(--muted)}
+.anchor-bar .a-obj{font-family:var(--mono);font-size:11px;color:var(--ink);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.agent-head{padding:12px 16px 10px;border-bottom:1px solid var(--hair-soft);flex:none}
+.agent-head .a-name{font-size:13px;font-weight:700;display:flex;align-items:center;gap:8px}
+.agent-head .a-sub{font-size:11px;color:var(--muted);margin-top:3px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.agent-head select{font-size:10px;border:1px solid var(--hair);background:#fff;color:var(--muted);max-width:170px;border-radius:6px;padding:1px 4px}
+.agent-stream{flex:1;overflow-y:auto;padding:14px 14px 24px;min-height:0}
+.a-msg{margin:0 2px 14px}
+.a-who{display:flex;align-items:center;gap:7px;margin-bottom:5px}
+.a-ava{width:16px;height:16px;border-radius:5px;flex:none}
+.a-ava.human{background:var(--ink)}
+.a-ava.agent{background:var(--term-bg);position:relative}
+.a-ava.agent::after{content:"";position:absolute;inset:5px;background:var(--term-green);border-radius:2px}
+.a-ava.plugin{background:var(--paper-deep);border:1px solid var(--hair)}
+.a-who .who{font-size:11px;font-weight:600}
+.a-body{font-size:12.5px;color:#26241f;white-space:pre-wrap;line-height:1.6}
+.a-msg.user .a-body{background:var(--paper-deep);padding:8px 12px;border-radius:8px}
+/* 运行心跳：固定在输入区上方的状态条，不占会话流、不劫持滚动 */
+.a-busybar{display:flex;align-items:center;gap:8px;padding:6px 12px;margin:0 2px 6px;border:1px dashed var(--hair);border-radius:8px;font-size:11px;color:var(--muted);background:var(--paper)}
+.a-busybar .pulse{width:7px;height:7px;border-radius:50%;background:var(--term-green);animation:tpulse 1.1s ease-in-out infinite;flex:none}
+@keyframes tpulse{0%,100%{opacity:.25}50%{opacity:1}}
+/* Agent 回复 Markdown 渲染 */
+.a-body.md h1,.a-body.md h2,.a-body.md h3{font-size:12.5px;font-weight:700;margin:10px 0 4px}
+.a-body.md h1{font-size:13.5px}
+.a-body.md p{margin:5px 0}
+.a-body.md strong{font-weight:700}
+.a-body.md code{font-family:var(--mono);font-size:10.5px;background:var(--paper-deep);padding:1px 4px;border-radius:4px}
+.a-body.md pre{background:var(--term-bg);color:var(--term-green);border-radius:8px;padding:8px 10px;margin:6px 0;overflow-x:auto;font-family:var(--mono);font-size:10.5px;line-height:1.6}
+.a-body.md pre code{background:none;padding:0;color:inherit}
+.a-body.md table{border-collapse:collapse;margin:6px 0;font-size:11px;width:100%}
+.a-body.md th,.a-body.md td{border:1px solid var(--hair);padding:3px 8px;text-align:left}
+.a-body.md th{background:var(--paper-deep);font-weight:600}
+.a-body.md ul,.a-body.md ol{margin:5px 0 5px 18px}
+.a-body.md li{margin:2px 0}
+.term{background:var(--term-bg);border-radius:9px;margin:0 2px 12px;overflow:hidden;font-family:var(--mono);font-size:10.5px;line-height:1.7;color:var(--term-green)}
+.term-head{display:flex;align-items:center;gap:7px;padding:5px 12px;border-bottom:1px solid rgba(74,222,128,.14);color:var(--term-dim);font-size:9px;letter-spacing:.14em;text-transform:uppercase}
+.term-body{padding:7px 12px 9px;max-height:200px;overflow-y:auto}
+.tline{white-space:pre-wrap;word-break:break-all}
+.tline.err{color:#ff5f6e}
+.a-card{border:1px solid var(--err);border-radius:9px;margin:0 2px 12px;overflow:hidden;background:rgba(255,255,255,.5)}
+.a-card-head{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--hair-soft)}
+.a-card-head .c-title{font-weight:600;font-size:12px}
+.a-card-body{padding:10px 12px;font-size:11px;color:var(--muted)}
+.a-verdict{display:flex;gap:8px;padding:0 12px 12px}
+.a-verdict .btn{flex:1;text-align:center}
+.agent-composer{flex:none;border-top:1px solid var(--hair);padding:10px 14px 12px}
+.a-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:9px}
+.a-chip{font-size:11px;color:var(--muted);border:1px solid var(--hair);border-radius:99px;padding:4px 11px}
+.a-chip:hover{color:var(--ink);border-color:var(--ink);background:rgba(255,255,255,.5)}
+.a-inputbar{display:flex;align-items:flex-end;gap:8px;border:1px solid var(--hair);border-radius:10px;padding:8px 8px 8px 12px;background:rgba(255,255,255,.55)}
+.a-inputbar:focus-within{border-color:var(--ink)}
+.a-inputbar textarea{flex:1;border:none;outline:none;background:transparent;resize:none;font-size:12px;line-height:1.5;max-height:90px;color:var(--ink)}
+.a-send{width:28px;height:28px;border-radius:7px;background:var(--ink);color:var(--paper);display:flex;align-items:center;justify-content:center;flex:none;font-size:13px}
+.a-meta{display:flex;gap:10px;margin-top:7px;font-family:var(--mono);font-size:9px;color:var(--faint);letter-spacing:.06em}
+.led{width:5px;height:5px;border-radius:50%;background:var(--ok);display:inline-block;margin-right:4px}
+
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--paper);font-size:12px;padding:8px 16px;border-radius:99px;opacity:0;pointer-events:none;transition:all .35s;z-index:99}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="wordmark">HIS Data Agent<em>DATA STUDIO</em></div>
+  <span class="vr"></span>
+  <span class="crumb" id="crumb">财税域 · 数据建模</span>
+  <div class="right"><span class="tlabel">宿主平台 · 深嵌</span><span class="tlabel green" id="gate-label">高危拦截 · 开启</span></div>
+</div>
+<div class="ide">
+  <!-- 左栏 -->
+  <aside class="left">
+    <nav class="menu" id="menu">
+      <button class="on" data-mode="model"><span class="m-ico">▤</span>数据模型</button>
+      <button data-mode="dev"><span class="m-ico">⌘</span>数据开发</button>
+      <button class="dim"><span class="m-ico">§</span>数据标准</button>
+      <button class="dim"><span class="m-ico">◈</span>资产目录</button>
+      <button class="dim"><span class="m-ico">◷</span>调度运维</button>
+    </nav>
+    <div id="model-view" style="display:flex;flex-direction:column;flex:1;min-height:0">
+      <div class="dir-head"><span class="tlabel">模型目录</span></div>
+      <div class="model-tree" id="model-tree"></div>
+    </div>
+    <div id="repo-view" style="display:none;flex-direction:column;flex:1;min-height:0">
+      <div class="dir-head"><span class="tlabel">作业目录</span><select id="branch-sel"></select></div>
+      <div class="model-tree" id="repo-tree"></div>
+    </div>
+    <div id="audit">
+      <div class="dir-head"><span class="tlabel">审计流水</span></div>
+      <div id="audit-body"></div>
+    </div>
+    <div class="left-foot">
+      <div class="row"><span>数据标准库</span><span id="std-ver">—</span></div>
+      <div class="row"><span>规范库</span><span>财税数据元 v1.2</span></div>
+      <div class="row"><span>高危拦截</span><span>开启</span></div>
+    </div>
+  </aside>
+
+  <!-- 中央 -->
+  <section class="center">
+    <div class="file-tabs" id="file-tabs"></div>
+    <div class="ws-head">
+      <span class="ws-title" id="ws-title">未选择对象</span>
+      <span class="ws-ver" id="ws-ver" style="display:none"></span>
+      <span style="margin-left:auto" id="ws-domain"></span>
+    </div>
+    <div class="sub-tabs" id="sub-tabs"></div>
+    <div class="ws-body" id="ws-body"></div>
+  </section>
+
+  <!-- 右栏 · Agent -->
+  <aside class="agent-rail">
+    <div class="anchor-bar"><span class="a-dot"></span><span class="a-txt">锚定</span><span class="a-obj" id="anchor-obj">—</span></div>
+    <div class="agent-head">
+      <div class="a-name">Data Agent <span class="tlabel green" id="agent-status">就绪</span></div>
+      <div class="a-sub"><span>写操作需你确认 · 独立于开发流程</span><select id="session-select"><option value="">新会话</option></select></div>
+    </div>
+    <div class="agent-stream" id="chat"></div>
+    <div class="agent-composer">
+      <div class="a-busybar" id="busybar" style="display:none"><span class="pulse"></span><span id="busybar-text"></span></div>
+      <div class="a-chips" id="a-chips"></div>
+      <div class="a-inputbar">
+        <textarea id="prompt" rows="1" placeholder="就锚定对象提问或下指令…"></textarea>
+        <button class="a-send" id="send">↑</button>
+      </div>
+      <div class="a-meta"><span><span class="led"></span>DeepSeek</span><span id="session-id"></span><span>写操作 · 需确认</span></div>
+    </div>
+  </aside>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ================= 状态 ================= */
+let sessionId = null, lastSeq = -1;
+let mode = 'model';                       // model | dev（左栏双空间）
+let active = { kind: null, file: null };  // kind: model | repo
+let openFiles = [];                       // [{kind, file}]
+let activeTab = null;
+let repoState = { branches: [], current: null, tree: [] };
+let modelsCache = [];
+let testResults = {};                     // path -> dryrun 结果（UI 展示态，数据源是他的 hisDryrun）
+let anchorObj = '—';
+let auditEvents = [];
+
+const $ = (s) => document.querySelector(s);
+const api = (p, o) => fetch(p, o).then((r) => r.json());
+const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+function toast(m) { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(t._tm); t._tm = setTimeout(() => t.classList.remove('show'), 2200); }
+
+const MODEL_TABS = [['design','模型设计'],['er','ER 图'],['ddl','DDL'],['publish','资产发布']];
+const ETL_TABS = [['flow','可视化'],['code','代码'],['test','测试运行'],['lineage','血缘影响']];
+const DAG_TABS = [['graph','依赖图'],['yaml','配置代码']];
+
+/* ================= 左栏：空间切换 ================= */
+document.querySelectorAll('#menu button[data-mode]').forEach((b) => b.addEventListener('click', () => {
+  mode = b.dataset.mode;
+  document.querySelectorAll('#menu button').forEach((x) => x.classList.toggle('on', x === b));
+  $('#model-view').style.display = mode === 'model' ? 'flex' : 'none';
+  $('#repo-view').style.display = mode === 'dev' ? 'flex' : 'none';
+  $('#crumb').textContent = mode === 'model' ? '财税域 · 数据建模' : `财税域 · 数据开发 · ${repoState.current ?? ''}`;
+  renderChips();
+}));
+
+/* ================= 左栏：模型树 ================= */
+async function loadModels() {
+  const d = await api('/api/models');
+  modelsCache = d.models;
+  $('#std-ver').textContent = d.stdLibVersion + ' · 已连接';
+  $('#model-tree').innerHTML = `<div class="tree-domain"><div class="td-head">财税域<span class="cnt">${d.models.length}</span></div>
+    ${d.models.map((m) => `<button class="tnode ${active.kind === 'model' && m.file === active.file ? 'on' : ''}" onclick="openFile('model','${m.file}')">
+      <span class="layer">${m.layer}</span>${m.file}
+      <span class="st-dot ${m.published ? 'pub' : 'draft'}"></span></button>`).join('')}</div>`;
+}
+
+/* ================= 左栏：代码仓树 ================= */
+async function loadRepoTree() {
+  repoState = await api('/api/repo/tree');
+  const sel = $('#branch-sel');
+  sel.innerHTML = repoState.branches.map((b) => `<option value="${b}" ${b === repoState.current ? 'selected' : ''}>⑂ ${b}</option>`).join('');
+  if (mode === 'dev') $('#crumb').textContent = `财税域 · 数据开发 · ${repoState.current}`;
+  const groups = {};
+  for (const e of repoState.tree) {
+    const dir = e.path.split('/').slice(0, -1).join('/') || '.';
+    (groups[dir] ??= []).push(e);
+  }
+  $('#repo-tree').innerHTML = Object.entries(groups).map(([dir, files]) => `
+    <div class="tree-domain"><div class="td-head mono">${dir}/<span class="cnt">${files.length}</span></div>
+    ${files.map((e) => `<button class="tnode ${active.kind === 'repo' && e.path === active.file ? 'on' : ''}" onclick="openFile('repo','${e.path}')">
+      <span class="layer">${e.kind === 'dag' ? 'DAG' : 'ETL'}</span>${e.path.split('/').pop()}
+      ${e.stale ? '<span class="dirty-badge" title="模型 ' + esc(e.stale.model) + ' 已升至 ' + esc(e.stale.currentVersion) + '，本作业基线 ' + esc(e.stale.baseVersion) + '">模型已更新</span>' : ''}
+      ${e.uncommitted ? '<span class="dirty-badge new">新增</span>' : e.dirty ? `<span class="dirty-badge">${e.dirty}</span>` : ''}
+    </button>`).join('')}</div>`).join('');
+}
+$('#branch-sel').addEventListener('change', async (e) => {
+  const r = await api('/api/repo/checkout', { method: 'POST', body: JSON.stringify({ branch: e.target.value }) });
+  if (r.error) { toast('分支切换失败: ' + r.error); await loadRepoTree(); return; }
+  repoState = { ...repoState, ...r };
+  toast('已切到分支 ' + e.target.value);
+  repoCache = {};
+  openFiles = openFiles.filter((f) => f.kind !== 'repo');
+  if (active.kind === 'repo') active = { kind: null, file: null };
+  await loadRepoTree(); renderFileTabs(); renderWorkspace();
+  if (sessionId) send(`workspace_anchor ${e.target.value} .`, true);
+});
+
+/* ================= 文件页签（多开） ================= */
+function openFile(kind, file) {
+  active = { kind, file };
+  if (!openFiles.some((f) => f.kind === kind && f.file === file)) openFiles.push({ kind, file });
+  activeTab = null;
+  renderFileTabs(); renderWorkspace(); loadModels(); loadRepoTree();
+  anchorObj = kind === 'model' ? file : `${repoState.current} · ${file}`;
+  $('#anchor-obj').textContent = anchorObj;
+  if (sessionId) send(kind === 'model' ? `workspace_anchor ${file}` : `workspace_anchor ${repoState.current} ${file.split('/').slice(0, -1).join('/')}`, true);
+}
+function renderFileTabs() {
+  $('#file-tabs').innerHTML = openFiles.map((f) => {
+    const label = f.kind === 'repo' ? f.file.split('/').pop() : f.file;
+    const ent = f.kind === 'repo' ? repoState.tree.find((e) => e.path === f.file) : null;
+    const dirty = ent && (ent.dirty || ent.uncommitted);
+    const on = active.kind === f.kind && active.file === f.file;
+    return `<div class="ftab ${on ? 'on' : ''}" data-kind="${f.kind}" data-f="${esc(f.file)}">
+      ${esc(label)}${dirty ? '<span class="dirty" title="有未提交修改"></span>' : ''}
+      ${openFiles.length > 1 ? `<span class="fx" data-x="${esc(f.file)}">✕</span>` : ''}</div>`;
+  }).join('');
+  document.querySelectorAll('.ftab').forEach((t) => t.addEventListener('click', (e) => {
+    const kind = t.dataset.kind, file = t.dataset.f;
+    if (e.target.dataset.x) {
+      e.stopPropagation();
+      openFiles = openFiles.filter((x) => !(x.file === e.target.dataset.x && x.kind === kind));
+      if (active.file === e.target.dataset.x && active.kind === kind) {
+        const next = openFiles[0];
+        active = next ? { kind: next.kind, file: next.file } : { kind: null, file: null };
+        activeTab = null;
+      }
+      renderFileTabs(); renderWorkspace(); return;
+    }
+    active = { kind, file }; activeTab = null;
+    renderFileTabs(); renderWorkspace();
+  }));
+}
+
+/* ================= 中央：工作区 ================= */
+function renderSubTabs(kind, fkind) {
+  const tabs = kind === 'model' ? MODEL_TABS : fkind === 'dag' ? DAG_TABS : ETL_TABS;
+  if (!tabs.some(([k]) => k === activeTab)) activeTab = tabs[0][0];
+  $('#sub-tabs').innerHTML = tabs.map(([k, label]) => `<button class="stab ${k === activeTab ? 'on' : ''}" data-tab="${k}">${label}</button>`).join('');
+  $('#sub-tabs').querySelectorAll('.stab').forEach((t) => t.addEventListener('click', () => { activeTab = t.dataset.tab; renderWorkspace(); }));
+}
+async function renderWorkspace() {
+  if (!active.kind) {
+    $('#ws-title').textContent = '未选择对象'; $('#ws-ver').style.display = 'none';
+    $('#ws-domain').innerHTML = ''; $('#sub-tabs').innerHTML = ''; $('#ws-body').innerHTML = '<p class="note">从左侧目录选择模型或作业文件。</p>';
+    return;
+  }
+  if (active.kind === 'model') return renderModelWs();
+  return renderRepoWs();
+}
+
+/* ----- 模型工作间 ----- */
+async function renderModelWs() {
+  renderSubTabs('model');
+  const m = await api('/api/models/' + encodeURIComponent(active.file));
+  if (m.error) { $('#ws-body').textContent = m.error; return; }
+  $('#ws-title').innerHTML = `${esc(m.cn)}<span class="mono">${esc(m.file)}</span>`;
+  const v = $('#ws-ver'); v.style.display = '';
+  v.textContent = (m.published ? '已发布 · ' : '') + m.version;
+  v.className = 'ws-ver' + (m.published ? ' published' : '');
+  $('#ws-domain').innerHTML = `<span class="tlabel">${esc(m.domain)}</span> <span class="tlabel">${esc(m.layer)}</span>`;
+  if (activeTab === 'design') return viewDesign(m);
+  if (activeTab === 'er') return viewER(m);
+  if (activeTab === 'ddl') return viewDDL(m);
+  return viewPublish(m);
+}
+function lintListRows(m, lint) {
+  const rows = [['命名规范', 'ok', '符合 R-001~R-068']];
+  const unb = m.fields.filter((f) => !f.std && !f.skip).length;
+  rows.push(['数据标准绑定率', unb > 0 ? 'warn' : 'ok', unb > 0 ? `缺 ${unb} 项 · 建议补齐` : '全部绑定或依规免绑']);
+  for (const i of lint?.issues ?? []) {
+    if (i.kind === 'type-mismatch') rows.push(['数据类型对齐', 'warn', i.message]);
+    else if (i.kind === 'unbound-no-hit') rows.push([`标准候选 · ${i.field}`, 'warn', '库中无候选 · 需起草']);
+  }
+  if (!rows.some((r) => r[0] === '数据类型对齐')) rows.push(['数据类型对齐', 'ok', '与标准定义一致']);
+  rows.push(['分区策略', 'ok', 'dt 月分区 yyyyMM']);
+  return rows.map((r) => `<div class="lint-row"><span class="lr-st ${r[1]}">${r[1] === 'ok' ? '✓' : '!'}</span>${esc(r[0])}<span class="lr-note">${esc(r[2])}</span></div>`).join('');
+}
+async function viewDesign(m) {
+  const lint = await api('/api/models/' + encodeURIComponent(active.file) + '/lint');
+  const bound = m.fields.filter((f) => f.std).length;
+  const jobRefs = (m.jobRefs ?? []).map((r) => `
+    <div class="jobref"><span class="mono">⚙ ${esc(r.job)}</span><span class="mono">${esc(r.dag ?? '')}</span>
+      <span class="mono" style="margin-left:auto">${esc(r.commitId ?? '')}</span></div>`).join('');
+  $('#ws-body').innerHTML = `<div class="sec-title">属性设计 <span class="tlabel">${bound}/${m.fields.length} 已绑定数据标准</span></div>
+    <table class="attr-table"><thead><tr><th>字段</th><th>类型</th><th>说明</th><th>数据标准</th><th>约束</th></tr></thead><tbody>
+    ${m.fields.map((f) => `<tr>
+      <td><span class="fn">${esc(f.n)}</span>${f.pk ? '<span class="pk">PK</span>' : ''}</td>
+      <td><span class="ft">${esc(f.t)}</span></td>
+      <td style="color:var(--muted)">${esc(f.c)}</td>
+      <td>${f.std ? `<span class="std-cell bound">✓ ${esc(f.std)}</span>` : f.skip ? `<span class="std-cell skip">— ${esc(f.skip)}</span>` : '<span class="std-cell unbound">未绑定</span>'}</td>
+      <td style="font-family:var(--mono);font-size:10.5px;color:var(--muted)">${f.n === 'dt' ? 'PARTITION' : f.pk ? 'NOT NULL' : '—'}</td>
+    </tr>`).join('')}</tbody></table>
+    <p class="note">绑定与属性修改交给右侧 Agent 批量处理；提交版本与资产发布需你确认。</p>
+    <div class="sec-title">规范性检查 <span class="tlabel">规则 · 财税数据元 v1.2</span></div>
+    <div class="lint-list">${lintListRows(m, lint)}</div>
+    ${jobRefs ? `<div class="sec-title">生产作业引用 <span class="tlabel">开发空间回写</span></div>${jobRefs}` : ''}`;
+}
+function viewER(m) {
+  const byFile = Object.fromEntries(modelsCache.map((x) => [x.file, x]));
+  const box = (x, y, w, name, sub, ver, main) => `
+    <rect x="${x}" y="${y}" width="${w}" height="64" rx="7" fill="#fbfaf6" stroke="${main ? '#0b0b0b' : 'rgba(11,11,11,.35)'}" stroke-width="${main ? 1.4 : 1}"/>
+    <text x="${x + w / 2}" y="${y + 24}" text-anchor="middle" font-size="10.5" font-family="monospace" fill="#0b0b0b">${esc(name)}</text>
+    <text x="${x + w / 2}" y="${y + 40}" text-anchor="middle" font-size="8.5" font-family="monospace" fill="#6d6a64">${esc(sub)}</text>
+    <text x="${x + w / 2}" y="${y + 54}" text-anchor="middle" font-size="8" font-family="monospace" fill="#9a6a14">${esc(ver)}</text>`;
+  if (m.model !== 'dwd_tax_declaration') {
+    $('#ws-body').innerHTML = `<div class="sec-title">ER 图 <span class="tlabel">${esc(m.domain)}</span></div>
+      <div class="er-box"><svg viewBox="0 0 340 120" style="width:100%;max-width:520px;display:block;margin:auto">
+      ${box(100, 28, 150, m.model, `${m.cn} · ${m.fields.length} 属性`, `${m.version} · ${m.published ? '已发布' : '草稿'}`, true)}
+      </svg></div><p class="note">该模型暂无外向关系。锚定 dwd_tax_declaration.model 可查看完整域内 ER。</p>`;
+    return;
+  }
+  const dim = byFile['dim_taxpayer.model'], pay = byFile['dwd_tax_payment.model'];
+  $('#ws-body').innerHTML = `<div class="sec-title">ER 图 <span class="tlabel">${esc(m.domain)} · 3 模型</span></div>
+    <div class="er-box"><svg viewBox="0 0 640 240" style="width:100%;display:block">
+    ${box(20, 30, 150, 'dim_taxpayer', `纳税主体 · 维表 · ${dim?.total ?? 8} 属性`, `${dim?.version ?? 'v1.2'} · 已发布`, false)}
+    ${box(300, 30, 190, 'dwd_tax_declaration', `申报记录 · 事实 · ${m.fields.length} 属性`, `${m.version} · ${m.published ? '已发布' : '草稿'}`, true)}
+    ${box(300, 150, 190, 'dwd_tax_payment', `缴款流水 · 事实 · ${pay?.total ?? 7} 属性`, `${pay?.version ?? 'v1.0'} · ${pay?.published ? '已发布' : '草稿'}`, false)}
+    <line x1="170" y1="62" x2="300" y2="62" stroke="rgba(11,11,11,.45)" stroke-width="1"/>
+    <text x="235" y="54" text-anchor="middle" font-size="9" font-family="monospace" fill="#6d6a64">1 : n · taxpayer_id</text>
+    <line x1="395" y1="94" x2="395" y2="150" stroke="rgba(11,11,11,.45)" stroke-width="1"/>
+    <text x="408" y="126" font-size="9" font-family="monospace" fill="#6d6a64">1 : n · decl_id</text>
+    </svg></div><p class="note">关系：纳税主体 1:n 申报记录 1:n 缴款流水。版本与属性数取自模型服务实时状态。</p>`;
+}
+function viewDDL(m) {
+  $('#ws-body').innerHTML = `<div class="sec-title">DDL <span class="tlabel">由模型生成 · ${m.version}</span></div>
+    <div class="ddl-view">${esc(m.ddl).replace(/--[^\n]*/g, (c) => `<span class="cm">${c}</span>`)}</div>
+    <p class="note">DDL 跟随模型状态实时生成。修改字段或绑定标准后此处同步更新。</p>`;
+}
+async function viewPublish(m) {
+  const lint = await api('/api/models/' + encodeURIComponent(active.file) + '/lint');
+  const refs = m.jobRefs ?? [];
+  $('#ws-body').innerHTML = `<div class="pub-grid">
+    <div class="pub-card"><h4>发布状态</h4>
+      <div class="pub-state"><span class="big ${m.published ? 'yes' : 'no'}">${m.published ? '已注册到资产平台' : '未发布 · 草稿'}</span></div>
+      <p class="note" style="margin-top:0">${m.published ? '资产目录可见 · 血缘已挂载' : '注册后将进入资产目录 · 挂载血缘与标准引用'}</p>
+      <button class="btn primary" id="btn-publish">${m.published ? '重新发布' : '发布数据资产'}</button>
+    </div>
+    <div class="pub-card"><h4>版本历史 <span class="tlabel">${(m.versions ?? []).length} 个版本</span></h4>
+      ${(m.versions ?? []).map((v) => `<div class="ver-row"><span class="v-no">${esc(v.v)}</span>${esc(v.n)}<span class="v-t">${esc(v.t)}</span></div>`).join('') || '<p class="note">暂无版本记录</p>'}
+    </div>
+    <div class="pub-card"><h4>质量门</h4><div class="lint-list" style="border:none">${lintListRows(m, lint)}</div></div>
+    <div class="pub-card"><h4>发布内容预览</h4>
+      <div class="ver-row"><span class="v-no">注册</span>${esc(m.model)} → 资产目录</div>
+      <div class="ver-row"><span class="v-no">血缘</span>${refs.length ? refs.map((r) => esc(r.job)).join('、') + ` → ${esc(m.model)}` : `ods 接入 → ${esc(m.model)}`}</div>
+      <div class="ver-row"><span class="v-no">标准</span>${m.fields.filter((f) => f.std).length} 处标准引用关系</div>
+      <div class="ver-row"><span class="v-no">部署</span>DDL → Hive prod · 调度由开发空间 .dag 管理</div>
+    </div></div>`;
+  $('#btn-publish').addEventListener('click', () => toast(m.published ? '已是最新发布状态' : '发布是 publish 级写操作：请交给右侧 Agent，审批卡片确认后执行'));
+}
+
+/* ----- 代码仓工作间 ----- */
+let repoCache = {};
+async function repoFile(p) {
+  if (!repoCache[p]) {
+    const d = await api('/api/repo/file?path=' + encodeURIComponent(p));
+    if (d.error) return d;
+    repoCache[p] = d;
+  }
+  return repoCache[p];
+}
+async function renderRepoWs() {
+  const f = await repoFile(active.file);
+  if (f.error) { $('#ws-title').textContent = '文件不可读'; $('#ws-body').textContent = f.error; $('#sub-tabs').innerHTML = ''; return; }
+  renderSubTabs('repo', f.kind);
+  const ent = repoState.tree.find((e) => e.path === active.file);
+  $('#ws-title').innerHTML = `${esc(active.file.split('/').pop())}<span class="mono">${esc(active.file)}</span>`;
+  const v = $('#ws-ver'); v.style.display = '';
+  v.textContent = ent?.stale ? `模型已更新 ${ent.stale.baseVersion}→${ent.stale.currentVersion}` : ent?.uncommitted ? '未提交 · 新增' : ent?.dirty ? `未提交修改 · ${ent.dirty}` : '已提交';
+  v.className = 'ws-ver' + (!ent?.dirty && !ent?.uncommitted && !ent?.stale ? ' published' : '');
+  $('#ws-domain').innerHTML = `<span class="tlabel">repo-etl</span> <span class="tlabel">${esc(repoState.current)}</span>`;
+  if (f.kind === 'dag') return activeTab === 'graph' ? viewDagGraph(f) : viewDagYaml(f);
+  if (activeTab === 'flow') return viewFlow(f);
+  if (activeTab === 'code') return viewCode(f);
+  if (activeTab === 'test') return viewTest(f);
+  return viewJobLineage(f);
+}
+function viewCode(f) {
+  const ent = repoState.tree.find((e) => e.path === active.file);
+  const html = esc(f.text)
+    .replace(/(--\s*@[^\n]*)/g, '<span class="an">$1</span>')
+    .replace(/(--[^\n]*)/g, (c) => c.startsWith('<span') ? c : `<span class="cm">${c}</span>`);
+  $('#ws-body').innerHTML = `<div class="sec-title">代码 <span class="tlabel">${esc(f.parsed.engine ?? 'etl')} · ${ent?.dirty || ent?.uncommitted ? '未提交' : '与分支一致'}</span></div>
+    <div class="ddl-view">${html}</div>
+    <p class="note">${ent?.dirty || ent?.uncommitted ? '工作区修改未提交——提交后才会落到分支上。' : '代码与分支一致。'}改代码可以交给右侧 Agent。</p>`;
+}
+/* 可视化 · 字段映射（V9 曲线 + 转换徽标框） */
+function viewFlow(f) {
+  const p = f.parsed;
+  const cols = p.columns ?? [];
+  const rh = 26, top = 58, h = top + cols.length * rh + 18;
+  const rows = cols.map((c, i) => {
+    const y = top + i * rh;
+    const tf = (c.funcs ?? []).length ? c.funcs.join(' · ') : null;
+    return `<text x="172" y="${y + 4}" text-anchor="end" style="font:11px monospace;fill:var(--ink)">${esc(c.expr.slice(0, 30))}</text>
+    <path d="M182 ${y} C 250 ${y}, 296 ${y}, 364 ${y}" style="stroke:rgba(11,11,11,.42);fill:none;stroke-width:1"/>
+    ${tf ? `<rect x="222" y="${y - 9}" width="112" height="16" rx="4" style="fill:#fffdf8;stroke:rgba(154,106,20,.55)"/><text x="278" y="${y + 3}" text-anchor="middle" style="font:9px monospace;fill:var(--warn)">${esc(tf)}</text>` : ''}
+    <text x="376" y="${y + 4}" style="font:11px monospace;fill:var(--ink)">${esc(c.alias ?? '?')}</text>
+    ${c.stdRef ? `<text x="620" y="${y + 4}" text-anchor="end" style="font:8.5px monospace;fill:var(--ok)">${esc(c.stdRef)}</text>` : `<text x="620" y="${y + 4}" text-anchor="end" style="font:8.5px monospace;fill:var(--warn)">未绑定</text>`}`;
+  }).join('');
+  $('#ws-body').innerHTML = `<div class="sec-title">可视化 · 字段映射 <span class="tlabel">${esc(p.engine ?? 'etl')} · ${cols.length} 列</span></div>
+    <div class="er-box"><svg viewBox="0 0 660 ${h}" style="width:100%;display:block">
+      <rect x="12" y="12" width="180" height="30" rx="6" style="fill:#fbfaf6;stroke:rgba(11,11,11,.35)"/>
+      <text x="102" y="31" text-anchor="middle" style="font:10.5px monospace;fill:var(--ink)">${esc((p.fromTables ?? [])[0] ?? '未知来源')}</text>
+      <rect x="360" y="12" width="288" height="30" rx="6" style="fill:#fbfaf6;stroke:#0b0b0b;stroke-width:1.3"/>
+      <text x="504" y="31" text-anchor="middle" style="font:10.5px monospace;fill:var(--ink)">${esc(p.targetTable ?? '?')}${p.partition ? ` · ${esc(p.partition)}` : ''}</text>
+      ${rows}
+    </svg></div>
+    <p class="note">左侧来源表达式 → 右侧目标列；中间徽标是转换逻辑，右侧绿色是数据标准引用。映射由 hisDevAst 实时解析代码生成，改代码后同步更新。</p>`;
+}
+/* 测试运行（dry-run 采样，约束固化在 Provider） */
+function viewTest(f) {
+  const r = testResults[active.file];
+  if (!r) {
+    $('#ws-body').innerHTML = `<div class="sec-title">测试运行</div>
+      <p class="note">尚未试运行。dry-run 采样不碰生产：只读账号 · 行数上限 1000 · 30s 熔断（约束固化在 Provider）。</p>
+      <button class="btn primary" id="btn-test">运行 dry-run 采样</button>`;
+    $('#btn-test').addEventListener('click', async () => {
+      $('#btn-test').textContent = '运行中…';
+      const res = await api('/api/repo/test', { method: 'POST', body: JSON.stringify({ path: active.file, sampleRows: 100 }) });
+      if (res.error) { toast(res.error); $('#btn-test').textContent = '运行 dry-run 采样'; return; }
+      testResults[active.file] = res;
+      renderWorkspace();
+    });
+    return;
+  }
+  const rows = [];
+  if (r.blocked) rows.push(['dry-run 采样', 'err', r.reason]);
+  else {
+    rows.push(['dry-run 采样', 'ok', `${r.sampledRows} 行 @分区 ${r.partition ?? '—'} · 模拟通过`]);
+    rows.push(['目标表', 'ok', r.targetTable ?? '—']);
+    rows.push(['列级标准引用', r.columns?.some((c) => c.stdRef) ? 'ok' : 'warn', `${r.columns?.filter((c) => c.stdRef).length ?? 0}/${r.columns?.length ?? 0} 列带 @std`]);
+    rows.push(['约束', 'ok', `只读 · 上限 ${r.cappedBy} 行 · 熔断 ${(r.timeoutMs ?? 0) / 1000}s`]);
+  }
+  $('#ws-body').innerHTML = `<div class="sec-title">测试运行 <span class="tlabel ${r.blocked ? 'warn' : 'green'}">最近一次 · ${r.blocked ? '被拦截' : '通过'}${r.simulated ? ' · 模拟' : ''}</span></div>
+    <div class="lint-list">${rows.map((x) => `<div class="lint-row"><span class="lr-st ${x[1]}">${x[1] === 'ok' ? '✓' : '!'}</span>${esc(x[0])}<span class="lr-note">${esc(x[2])}</span></div>`).join('')}</div>
+    ${r.note ? `<p class="note">${esc(r.note)}</p>` : ''}
+    <button class="btn primary" id="btn-test" style="margin-top:10px">重新运行</button>`;
+  $('#btn-test').addEventListener('click', () => { delete testResults[active.file]; renderWorkspace(); });
+}
+/* 血缘影响（作业级） */
+async function viewJobLineage(f) {
+  const L = await api('/api/repo/lineage?path=' + encodeURIComponent(active.file));
+  if (L.error) { $('#ws-body').innerHTML = `<p class="note">${esc(L.error)}</p>`; return; }
+  const upTxt = (L.upstream.sources ?? []).map((s) => `${(s.producedBy ?? []).join('、') || '外部源'} → ${s.table}`).join('<br>') || '—';
+  const downTxt = [...(L.downstream.readers ?? []), ...(L.downstream.dagDependents ?? [])].join('、') || '（无下游）';
+  $('#ws-body').innerHTML = `<div class="sec-title">血缘影响 <span class="tlabel">表级 · 作业级</span></div>
+    <div class="pub-card" style="margin-bottom:10px"><h4>链路</h4>
+      <div class="ver-row"><span class="v-no">上游</span>${upTxt}</div>
+      <div class="ver-row"><span class="v-no">目标</span>${esc(active.file)} → ${esc(L.downstream.targetTable ?? '—')}</div>
+      <div class="ver-row"><span class="v-no">下游</span>${esc(downTxt)}</div>
+      <div class="ver-row"><span class="v-no">调度依赖</span>${(L.upstream.scheduleDepends ?? []).map(esc).join('、') || '—（链路入口）'}</div>
+    </div>
+    <p class="note">血缘由 hisDevAst 从当前分支已提交视图实时计算；上线时 asset_sync 把「作业 → 模型」回写资产目录，模型发布页同步可见。影响面：<b style="color:var(--warn)">${L.downstream.impact ?? 0}</b> 个下游。</p>`;
+}
+/* 调度 · 依赖 DAG 图（横向） */
+async function viewDagGraph(f) {
+  const p = f.parsed;
+  let L = null;
+  try { L = await api('/api/repo/lineage?path=' + encodeURIComponent(p.ref)); } catch {}
+  const alertCh = f.text.match(/channel:\s*(.+)/)?.[1]?.trim() ?? '—';
+  const upName = (p.depends ?? [])[0]?.split('/').pop() ?? null;
+  const downName = L?.downstream?.dagDependents?.[0]?.split('/').pop() ?? null;
+  const node = (x, name, time, main) => `
+    <rect x="${x}" y="40" width="170" height="58" rx="7" style="fill:#fbfaf6;stroke:${main ? '#0b0b0b' : 'rgba(11,11,11,.35)'};stroke-width:${main ? 1.4 : 1}"/>
+    <text x="${x + 85}" y="63" text-anchor="middle" style="font:10px monospace;fill:var(--ink)">${esc(name)}</text>
+    <text x="${x + 85}" y="82" text-anchor="middle" style="font:9px monospace;fill:var(--warn)">${esc(time)}</text>`;
+  const edge = (x1, x2, label) => `
+    <line x1="${x1}" y1="69" x2="${x2}" y2="69" style="stroke:rgba(11,11,11,.45);stroke-width:1"/>
+    <path d="M${x2} 69 l-7 -3.4 v6.8 z" style="fill:rgba(11,11,11,.45)"/>
+    <text x="${(x1 + x2) / 2}" y="60" text-anchor="middle" style="font:8.5px monospace;fill:var(--muted)">${esc(label)}</text>`;
+  $('#ws-body').innerHTML = `<div class="sec-title">可视化 · 依赖 DAG <span class="tlabel">${esc(p.cron ?? '无 cron')}</span></div>
+    <div class="er-box"><svg viewBox="0 0 660 140" style="width:100%;display:block">
+      ${upName ? node(20, upName, '上游调度', false) : '<text x="105" y="73" text-anchor="middle" style="font:10px monospace;fill:var(--faint)">数据源 · 链路入口</text>'}
+      ${edge(190, 242, '依赖')}
+      ${node(242, active.file.split('/').pop(), (p.cron ?? '') + ' 触发', true)}
+      ${edge(412, 464, '触发')}
+      ${downName ? node(464, downName, '下游调度', false) : '<text x="549" y="73" text-anchor="middle" style="font:10px monospace;fill:var(--faint)">（无下游）</text>'}
+    </svg></div>
+    <div class="pub-grid">
+      <div class="pub-card"><h4>运行策略</h4>
+        <div class="ver-row"><span class="v-no">cron</span>${esc(p.cron ?? '—')} · 每日</div>
+        <div class="ver-row"><span class="v-no">依赖</span>${(p.depends ?? []).map((d) => esc(d.split('/').pop())).join('、') || '—'}</div>
+        <div class="ver-row"><span class="v-no">重试</span>${p.maxAttempts ?? '—'} 次</div>
+        <div class="ver-row"><span class="v-no">超时</span>${p.timeout ?? '—'} s 熔断</div>
+        <div class="ver-row"><span class="v-no">告警</span>${esc(alertCh)}</div>
+      </div>
+      <div class="pub-card"><h4>说明</h4>
+        <p class="note" style="margin-top:0">调度作业是独立文件（.dag），通过 ref 指向 ETL 作业（.etl）。改 ETL 不动调度；改调度不动 ETL。两者分开提交、分开审计。</p>
+      </div></div>`;
+}
+function viewDagYaml(f) {
+  $('#ws-body').innerHTML = `<div class="sec-title">配置代码 <span class="tlabel">yaml · ref → ${esc(f.parsed.ref ?? '?')}</span></div>
+    <div class="ddl-view">${esc(f.text)}</div>
+    <p class="note">调度配置即代码，与 ETL 作业分离管理。修改后同样需要提交与上线确认。</p>`;
+}
+
+/* ================= 右栏：Agent 会话流 ================= */
+/* 轻量 Markdown 渲染（Agent 回复用）：代码块/表格/标题/列表/加粗/行内代码 */
+function mdInline(t) {
+  return esc(t)
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+}
+function mdToHtml(src) {
+  const pres = [];
+  const s = String(src ?? '').replace(/```[a-zA-Z]*\n?([\s\S]*?)(?:```|$)/g, (m, code) => {
+    pres.push(`<pre><code>${esc(code.replace(/\n+$/, ''))}</code></pre>`);
+    return `\n${pres.length - 1}\n`;
+  });
+  const out = [];
+  const lines = s.split('\n');
+  let i = 0, list = null;
+  const closeList = () => { if (list) { out.push(`</${list}>`); list = null; } };
+  while (i < lines.length) {
+    const ln = lines[i];
+    const ph = ln.match(/^(\d+)$/);
+    if (ph && pres[+ph[1]]) { closeList(); out.push(pres[+ph[1]]); i++; continue; }
+    const h = ln.match(/^(#{1,4})\s+(.*)$/);
+    if (h) { closeList(); out.push(`<h${h[1].length}>${mdInline(h[2])}</h${h[1].length}>`); i++; continue; }
+    if (/^\s*\|.*\|\s*$/.test(ln) && i + 1 < lines.length && /^\s*\|[\s:|-]+\|\s*$/.test(lines[i + 1])) {
+      closeList();
+      const cells = (l) => l.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
+      const head = cells(ln);
+      i += 2;
+      const rows = [];
+      while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) { rows.push(cells(lines[i])); i++; }
+      out.push('<table><tr>' + head.map((c) => `<th>${mdInline(c)}</th>`).join('') + '</tr>' +
+        rows.map((r) => '<tr>' + r.map((c) => `<td>${mdInline(c)}</td>`).join('') + '</tr>').join('') + '</table>');
+      continue;
+    }
+    const ul = ln.match(/^\s*[-*•]\s+(.*)$/);
+    if (ul) { if (list !== 'ul') { closeList(); out.push('<ul>'); list = 'ul'; } out.push(`<li>${mdInline(ul[1])}</li>`); i++; continue; }
+    const ol = ln.match(/^\s*\d+[.、)]\s+(.*)$/);
+    if (ol) { if (list !== 'ol') { closeList(); out.push('<ol>'); list = 'ol'; } out.push(`<li>${mdInline(ol[1])}</li>`); i++; continue; }
+    closeList();
+    if (ln.trim()) out.push(`<p>${mdInline(ln)}</p>`);
+    i++;
+  }
+  closeList();
+  return out.join('');
+}
+function termBlock(lines) {
+  const el = document.createElement('div');
+  el.className = 'term';
+  el.innerHTML = `<div class="term-head"><span>tool · session log</span></div><div class="term-body"></div>`;
+  const body = el.querySelector('.term-body');
+  for (const [text, isErr] of lines) {
+    const l = document.createElement('div');
+    l.className = 'tline' + (isErr ? ' err' : '');
+    l.textContent = text;
+    body.appendChild(l);
+  }
+  appendChat(el);
+}
+let pendingTermLines = [];
+function flushTerm() { if (pendingTermLines.length) { termBlock(pendingTermLines); pendingTermLines = []; } }
+function addMsg(cls, text, who) {
+  flushTerm();
+  const el = document.createElement('div');
+  el.className = 'a-msg' + (cls === 'user' ? ' user' : '');
+  const ava = cls === 'user' ? 'human' : cls === 'anchor' ? 'plugin' : 'agent';
+  el.innerHTML = `<div class="a-who"><span class="a-ava ${ava}"></span><span class="who">${who}</span></div>`;
+  const body = document.createElement('div');
+  if (cls === 'agent') { body.className = 'a-body md'; body.innerHTML = mdToHtml(text); }
+  else { body.className = 'a-body'; body.textContent = text; }
+  el.appendChild(body);
+  appendChat(el);
+}
+function addTrace(text, isErr) { pendingTermLines.push([text, isErr]); }
+
+/* ---- 运行进展心跳：输入区上方固定条，不进会话流、不抢滚动 ---- */
+let busy = false;         // 本 turn 是否在进行中
+let turnStartAt = 0;      // turn/start 的时间戳（ms）
+let lastPhase = '';       // 最近进展标签（步骤/工具/生成中…）
+function showThinking(label) {
+  lastPhase = label;
+  const secs = turnStartAt ? Math.max(0, Math.round((Date.now() - turnStartAt) / 1000)) : 0;
+  $('#busybar-text').textContent = `处理中 · ${label} · ${secs}s`;
+  $('#busybar').style.display = 'flex';
+}
+function hideThinking() { $('#busybar').style.display = 'none'; lastPhase = ''; }
+setInterval(() => { if (busy && lastPhase) showThinking(lastPhase); }, 1000);
+
+/* 智能滚动：用户本来就在底部附近才跟随到底，否则保持其阅读位置 */
+function atBottom() { const c = $('#chat'); return c.scrollHeight - c.scrollTop - c.clientHeight < 120; }
+function appendChat(el) {
+  const keep = atBottom();
+  $('#chat').appendChild(el);
+  if (keep) requestAnimationFrame(() => { const c = $('#chat'); c.scrollTop = c.scrollHeight; });
+}
+
+function renderEvents(events) {
+  for (const e of events) {
+    const d = e.data ?? {};
+    if (e.type === 'user/message') {
+      // user/message 事件的 data 直挂消息本体（content/source/role），无 message 包装层
+      const msg = d.message ?? d;
+      const t = (msg.content ?? []).map((b) => b.text ?? '').join('').trim();
+      const src = msg.source;
+      if (src?.kind === 'plugin' && src.plugin === 'his-workspace-anchor') {
+        // 工作区锚定注入：只显示一条摘要，全文不进会话流
+        if (src.summary) {
+          anchorObj = src.summary.replace(/^锚定切换: /, '');
+          $('#anchor-obj').textContent = anchorObj;
+          addMsg('anchor', src.summary, '锚定 · 工作区');
+        }
+      } else if (src?.kind === 'user') {
+        if (t) addMsg('user', t, '你');
+      }
+      // 其余注入（goal 轮次 / skill 目录 / 系统快照）是 Agent 内部上下文，不进会话流
+    } else if (e.type === 'assistant/message') {
+      const t = (d.message?.content ?? []).filter((b) => b.type === 'text').map((b) => b.text).join('');
+      if (t) addMsg('agent', t, 'Data Agent');
+    } else if (e.type === 'turn/start') {
+      busy = true; turnStartAt = Date.now(); showThinking('启动');
+    } else if (e.type === 'step/start') {
+      showThinking(`步骤 ${d.step}`);
+      addTrace(`── 步骤 ${d.step} ──`);
+    } else if (e.type === 'assistant/chunk' || e.type === 'text-chunks' || e.type === 'reasoning-chunks') {
+      if (busy) showThinking('模型生成中');
+    } else if (e.type === 'tool/call') {
+      showThinking(`调用工具 ${d.name}`);
+      pendingTermLines.push([`$ ${d.name} ${(typeof d.arguments === 'string' ? d.arguments : JSON.stringify(d.arguments ?? '')).slice(0, 120)}`]);
+    } else if (e.type === 'tool/code-dispatch') {
+      showThinking(`工具 ${d.name}`);
+      pendingTermLines.push([`  ↳ ${d.name}(${(typeof d.arguments === 'string' ? d.arguments : JSON.stringify(d.arguments ?? '')).slice(0, 90)})`, d.isError]);
+    } else if (e.type === 'tool/result') {
+      showThinking('工具返回');
+      for (const b of d.message?.content ?? []) {
+        if (b.type !== 'tool-result') continue;
+        const t = (b.content ?? []).map((c) => c.text ?? '').join('').slice(0, 300);
+        pendingTermLines.push([t, b.isError]);
+      }
+    } else if (e.type === 'approval/asked') {
+      showThinking('等待你确认写操作');
+    } else if (e.type === 'approval/decided') {
+      pendingTermLines.push([`审批 ${d.outcome === 'allowed-once' ? '✓ 已确认' : '✗ 已打回'}`, d.outcome !== 'allowed-once']);
+    } else if (e.type === 'turn/end') {
+      busy = false; hideThinking();
+    }
+    lastSeq = Math.max(lastSeq, e.seq);
+  }
+  flushTerm();
+  renderAudit();
+  if (events.some((e) => e.type === 'tool/result' || e.type === 'tool/code-dispatch')) {
+    repoCache = {}; testResults = {};
+    renderWorkspace(); loadModels(); loadRepoTree(); renderFileTabs();
+  }
+}
+function renderPendingApprovals(list) {
+  document.querySelectorAll('.a-card.approval').forEach((el) => el.remove());
+  for (const p of list) {
+    flushTerm();
+    const el = document.createElement('div');
+    el.className = 'a-card approval';
+    el.innerHTML = `<div class="a-card-head"><span class="c-title">⚠ 写操作待确认 · ${p.toolName}</span></div>
+      <div class="a-card-body">${esc(p.reason)}</div>
+      <div class="a-verdict"><button class="btn primary" onclick="decide('${p.id}','allowed-once')">确认执行</button>
+      <button class="btn danger" onclick="decide('${p.id}','rejected')">打回</button></div>`;
+    appendChat(el);
+  }
+}
+async function decide(id, outcome) {
+  await api('/api/approvals/' + id, { method: 'POST', body: JSON.stringify({ outcome, by: 'UI 用户' }) });
+  toast(outcome === 'allowed-once' ? '已确认执行' : '已打回');
+  poll();
+}
+
+/* ================= 审计流水 ================= */
+function renderAudit() {
+  const rows = [];
+  const pending = new Map();
+  for (const e of auditEvents) {
+    const d = e.data ?? {};
+    if (e.type === 'approval/asked') pending.set(d.id, d);
+    if (e.type === 'approval/decided' && pending.has(d.id)) {
+      const a = pending.get(d.id);
+      rows.push(`<div class="a-row ${d.outcome === 'allowed-once' ? 'ok' : 'no'}"><b>${a.toolName}</b> ${d.outcome === 'allowed-once' ? '✓ 已确认' : '✗ 已打回'}</div>`);
+    }
+  }
+  $('#audit-body').innerHTML = rows.join('') || '<div class="a-row">暂无写入事件</div>';
+}
+
+/* ================= 快捷指令 ================= */
+function renderChips() {
+  let chips;
+  if (mode === 'dev') {
+    if (active.kind === 'repo' && active.file?.endsWith('.etl')) chips = ['检查这段代码的规范性', '做 dry-run 采样验证', '提交并上线（需两次确认）'];
+    else if (active.kind === 'repo') chips = ['这个调度的上下游是什么', '上线这个调度作业'];
+    else chips = ['新建 dwd 层作业的 ETL 与调度'];
+  } else {
+    chips = active.kind === 'model'
+      ? ['分析未绑定字段并批量绑定', '生成 DDL 核对标准引用', '提交新版本并登记资产']
+      : ['治理 dwd_tax_declaration 的标准绑定'];
+  }
+  $('#a-chips').innerHTML = chips.map((c) => `<button class="a-chip">${esc(c)}</button>`).join('');
+  document.querySelectorAll('.a-chip').forEach((b) => b.addEventListener('click', () => { $('#prompt').value = b.textContent; $('#prompt').focus(); }));
+}
+
+/* ================= 会话 ================= */
+async function loadSessionList() {
+  const d = await api('/api/sessions');
+  const sel = $('#session-select');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">新会话</option>' + d.sessions.map((s) =>
+    `<option value="${s.id}">${s.live ? '● ' : ''}${s.id.slice(8, 20)} · ${new Date(s.mtime).toLocaleTimeString()}</option>`).join('');
+  sel.value = cur;
+}
+$('#session-select').addEventListener('change', async (e) => {
+  sessionId = e.target.value || null;
+  lastSeq = -1; $('#chat').innerHTML = ''; auditEvents = [];
+  busy = false; turnStartAt = 0; lastPhase = '';
+  $('#session-id').textContent = sessionId ? sessionId.slice(0, 18) : '';
+  poll();
+});
+async function send(text, silent) {
+  const t = (text ?? $('#prompt').value).trim();
+  if (!t) return;
+  if (!silent) $('#prompt').value = '';
+  const r = await api('/api/chat', { method: 'POST', body: JSON.stringify({ sessionId, text: t }) });
+  if (!sessionId) { sessionId = r.sessionId; $('#session-id').textContent = sessionId.slice(0, 18); }
+  busy = true; turnStartAt = Date.now(); showThinking('已发送，等待响应');
+  poll();
+}
+$('#send').addEventListener('click', () => send());
+$('#prompt').addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) send(); });
+async function poll() {
+  if (!sessionId) return;
+  const d = await api(`/api/sessions/${sessionId}/events?after=${lastSeq}`);
+  if (d.error) return;
+  renderEvents(d.events);
+  auditEvents = [...auditEvents, ...d.events];
+  renderPendingApprovals(d.pendingApprovals ?? []);
+  if (busy) {
+    // 归档会话中途翻到、事件流已尽但没有 turn/end：90s 后自动解除心跳，避免假死
+    if (!d.live && Date.now() - turnStartAt > 90000) { busy = false; hideThinking(); }
+    else {
+      const secs = Math.max(0, Math.round((Date.now() - turnStartAt) / 1000));
+      $('#agent-status').textContent = `运行中 · ${lastPhase || '等待响应'} · ${secs}s`;
+      return;
+    }
+  }
+  $('#agent-status').textContent = d.live ? '会话活跃' : '已归档(重放)';
+}
+setInterval(() => { poll(); }, 1500);
+
+loadModels(); loadRepoTree(); loadSessionList(); renderChips(); renderWorkspace();
+setInterval(loadSessionList, 5000);
+</script>
+</body>
+</html>

@@ -1,0 +1,69 @@
+# his-data-agent patch 层
+# 1) 模型：真实 DeepSeek（默认 deepseek-v4-flash），key 走 DEEPSEEK_API_KEY 环境变量/凭据 seam
+# 2) 安全关键：关闭通用 shell/文件写工具，写操作只存在域工具一条通道
+# 3) 关闭默认外发遥测
+# 4) 挂载 HIS 插件
+
+- id: tool-bash
+  disabled: true
+- id: tool-pwsh
+  disabled: true
+- id: tool-fs
+  disabled: true
+- id: tool-fs-search
+  disabled: true
+- id: tool-str-replace-editor
+  disabled: true
+- id: tool-web
+  disabled: true
+- id: session-telemetry-otel
+  disabled: true
+
+# P0 边界：不做子 Agent / 后台任务，全部摘除（V9 设计定稿，P0-9 试运行后补齐）
+- id: subagent
+  disabled: true
+- id: subagent-spawn-in-process
+  disabled: true
+- id: subagent-fork-in-process
+  disabled: true
+- id: tool-subagent-control
+  disabled: true
+- id: tool-subagent-list-agents
+  disabled: true
+- id: tool-subagent
+  disabled: true
+- id: tool-subagent-fork
+  disabled: true
+- id: tool-subagent-report
+  disabled: true
+- id: tool-jobs
+  disabled: true
+# 级联依赖：subagents 服务摘除后这三个注入它，必须一并禁用
+- id: workflow-worker-thread
+  disabled: true
+- id: tool-workflow
+  disabled: true
+- id: tool-ralph
+  disabled: true
+
+- insert:
+    - id: his-approval-policy
+      name: '@his/approval-policy'
+      config:
+        riskOverrides:
+          todo_write: read
+          exit_plan_mode: read
+          create_goal: read
+          get_goal: read
+          update_goal: read
+          run_code: read
+    - id: his-approval-answerer
+      name: '@his/approval-policy/answerer'
+    - id: his-domain-tools-modeling
+      name: '@his/domain-tools-modeling'
+    - id: his-workspace-anchor
+      name: '@his/workspace-anchor'
+    - id: his-workspace-repo
+      name: '@his/workspace-repo'
+    - id: his-domain-tools-dev
+      name: '@his/domain-tools-dev'

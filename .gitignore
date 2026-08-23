@@ -1,0 +1,23 @@
+# 依赖
+node_modules/
+**/node_modules/
+
+# 运行时产物（可再生成）
+
+# 种子仓：packages/workspace-repo/seed-repo.js 首次启动自动重建
+runtime/repo-etl/
+
+# 会话日志（含对话内容，不入库）
+dsh-home/sessions/
+dsh-home/.anonymous-user-id
+
+# M0/M1 穿刺实验临时区
+.spikes/
+
+# 环境与密钥
+.env
+.env.*
+*.key
+
+# 系统
+.DS_Store
