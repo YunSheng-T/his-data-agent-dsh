@@ -1,0 +1,16 @@
+{
+  "name": "his-data-agent",
+  "version": "0.3.0",
+  "private": true,
+  "description": "HIS Data Agent · 数据工作台内置 AI 数据工程师（dsh profiles + his-* 插件 + 回归断言）",
+  "type": "module",
+  "scripts": {
+    "setup": "pnpm install && pnpm --dir dsh-home/profiles/his-data-agent install && pnpm --dir dsh-home/profiles/his-studio install",
+    "studio": "node scripts/dsh-run.mjs --profile his-studio",
+    "agent": "node scripts/dsh-run.mjs --profile his-data-agent",
+    "test:regression": "node tests/regression/run-all.mjs"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh": "0.1.1-rc.2"
+  }
+}

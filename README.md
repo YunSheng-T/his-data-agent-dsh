@@ -43,56 +43,51 @@ his-data-agent/
 git clone git@github.com:YunSheng-T/his-data-agent-dsh.git
 cd his-data-agent-dsh
 
-# 1. 装依赖（插件以 pnpm link: 挂源码，两个 profile 都要装；逐行执行，全平台通用）
-cd dsh-home/profiles/his-data-agent
-pnpm install
-cd ../his-studio
-pnpm install
-cd ../../..
+# 1. 一键装齐依赖：根目录（含 @deepseek-ai/dsh，钉死 0.1.1-rc.2）+ 两个 profile 的插件
+pnpm run setup
 
 # 2. 无需手工准备种子仓/会话目录：
 #    runtime/repos/ 首次启动由 packages/workspace-repo/seed-repo.js 自动重建
 #    dsh-home/sessions 随会话自动产生（本地日志，不入库）
 
-# 3. 启动（见下方「运行」节；密钥走 DEEPSEEK_API_KEY 环境变量）
+# 3. 设密钥（只需一次；bash 用 export，PowerShell 用 $env:DEEPSEEK_API_KEY = "sk-xxx"）
+export DEEPSEEK_API_KEY=sk-xxx
+
+# 4. 启动（见下方「运行」节）
 ```
+
+> 依赖说明：`@deepseek-ai/dsh` 已声明在根 `package.json`（`dsh-base` bundle 是它的传递依赖，profile 不用单独装）；启动统一走 `scripts/dsh-run.mjs` 启动器——自动把 `DSH_HOME` 指向仓库内 `dsh-home`、解析仓内 `node_modules/.bin/dsh`，bash / PowerShell / cmd 行为一致。
 
 ## 运行
 
-bash（macOS / Linux / Git Bash）：
+以下命令全平台通用（在仓库根目录执行；密钥环境变量需提前设好，见上）：
 
 ```bash
-# headless（CI / 回归）
-DSH_HOME="$PWD/dsh-home" DEEPSEEK_API_KEY=sk-xxx \
-  /path/to/dsh --profile his-data-agent "你的建模任务指令"
-DSH_HOME="$PWD/dsh-home" node tests/regression/assert-journey.mjs approve   # 全链路断言
-# 打回路径：在上一行前加 HIS_REJECT_TOOL=std_create_draft，断言场景换 reject-draft
+# headless（CI / 单任务）
+pnpm run agent -- "你的建模任务指令"
 
-# 三栏工作台（浏览器交互）
-DSH_HOME="$PWD/dsh-home" DEEPSEEK_API_KEY=sk-xxx \
-  /path/to/dsh --profile his-studio        # 无任务参数，进程常驻
-open http://localhost:7300/                # Linux 用 xdg-open，或手动开浏览器
-node tests/regression/e2e-studio.mjs       # 表层端到端（需 studio 已在跑）
+# 三栏工作台（浏览器交互，进程常驻）
+pnpm run studio
+# 然后浏览器打开 http://localhost:7300/
+
+# 全量回归（12 套断言；studio 未启动时自动跳过 studio 依赖型套件并明示）
+pnpm run test:regression
 ```
 
-PowerShell（Windows，逐行执行；环境变量先 set 再运行，不支持内联前缀）：
+进阶（按需）：
 
-```powershell
-$env:DSH_HOME = "$PWD\dsh-home"
-$env:DEEPSEEK_API_KEY = "sk-xxx"
+```bash
+# 打回路径回归：先设 HIS_REJECT_TOOL=std_create_draft，再单独跑断言
+HIS_REJECT_TOOL=std_create_draft node tests/regression/assert-journey.mjs reject-draft   # bash
+# PowerShell: $env:HIS_REJECT_TOOL = "std_create_draft"
 
-# headless（CI / 回归）
-dsh --profile his-data-agent "你的建模任务指令"
-node tests\regression\assert-journey.mjs approve
-# 打回路径：$env:HIS_REJECT_TOOL = "std_create_draft"，断言场景换 reject-draft
+# Code 模式旅程需额外设 DSH_TOOLS_MODE=code（bash 内联前缀 / PowerShell `$env:DSH_TOOLS_MODE = "code"`）
 
-# 三栏工作台（浏览器交互）
-dsh --profile his-studio                   # 无任务参数，进程常驻
-start http://localhost:7300/               # 或手动开浏览器
-node tests\regression\e2e-studio.mjs       # 表层端到端（需 studio 已在跑）
+# 表层端到端（需 studio 已在跑）
+node tests/regression/e2e-studio.mjs
 ```
 
-> `/path/to/dsh` 指 dsh CLI 的可执行文件；若装在项目 node_modules 里，bash 用 `node_modules/.bin/dsh`，PowerShell 用 `node_modules\.bin\dsh.cmd`（或 `npx dsh` / `pnpm dlx dsh`）。Code 模式旅程需额外设 `DSH_TOOLS_MODE=code`（bash 内联前缀 / PowerShell `$env:DSH_TOOLS_MODE = "code"`）。
+> 若想绕开启动器直接调 dsh：bash 用 `node_modules/.bin/dsh`，PowerShell 用 `node_modules\.bin\dsh.cmd`，并自行设置 `DSH_HOME` 指向 `dsh-home`。
 
 ## 关键约定
 
@@ -182,3 +177,5 @@ node tests\regression\e2e-studio.mjs       # 表层端到端（需 studio 已在
 - 一致性扫描的口径对齐：模型绑定写 `std/X vN`、代码写 `@std/X vN`，比对前 strip `@`，别让格式差造假差异。
 - 「最新会话」断言的二次踩坑：旅程断言按 raw 字符串匹配工具名仍会被**工具 schema 快照**误中（快照里就有 `"name":"repo_commit"`），必须逐行解析事件结构判 `tool/call`/`tool/code-dispatch` 的 `data.name`；用户在日常工作室聊天就会让 mtime 最新会话不再是旅程会话；
 - patch 旅程断言引用的仓路径要跟随多租户迁移（`runtime/repo-etl` → `runtime/repos/finance-dw`）。
+- **dsh CLI 本身必须声明进根 `package.json`**：profile 的 `link:` 插件不会带来 dsh；之前 dsh 一直来自仓外旧工程，换台机器 clone 就「找不到 dsh」。跨平台启动用 `scripts/dsh-run.mjs` 包一层（自动指 DSH_HOME、解析 .bin、Windows 走 shell），README 只留一套 `pnpm run` 命令，避免 bash/PowerShell 双份文档漂移；
+- 共享仓被多套断言迁移/补种时，依赖 studio 实时解析的套件要**最先跑**（run-all.mjs 里排序保证），否则读到中间态偶发误报。
