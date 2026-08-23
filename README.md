@@ -13,59 +13,86 @@ his-data-agent/
 │   └── his-studio/                   # 工作台 Profile：bundles(仅 dsh-base)，进程常驻 + HTTP 表层
 │       └── cordis.patch.yml          # 两个 profile 同步：禁用 shell/file-write/web/遥测/子代理/workflow
 ├── packages/
-│   ├── approval-policy/              # @his/approval-policy：三级边界 + fail-closed + 双保险
-│   │   ├── index.js                  #   策略本体（pre-execute + guard）
-│   │   └── answerer.js               #   headless 模拟人工应答器（环境变量控制确认/打回）
-│   ├── domain-tools-modeling/        # @his/domain-tools-modeling：建模域 11 个工具
-│   │   ├── definitions.js            #   Definition 层契约（JSON Schema + risk 标注）
-│   │   ├── provider-mock.js          #   Provider 层：宿主平台内存替身（可整层替换）
-│   │   └── seed-data.js              #   财税域种子数据（移植自 V9 原型 MODELS）
+│   ├── approval-policy/              # @his/approval-policy：五级 risk 边界 + fail-closed + 双保险
+│   ├── domain-tools-modeling/        # @his/domain-tools-modeling：建模域 12 个工具（definitions/provider-mock/seed-data）
+│   ├── domain-tools-dev/             # @his/domain-tools-dev：开发域 17 个工具（ast/codegen/lint/lineage + cicd/sched/dryrun Provider）
+│   ├── workspace-repo/               # @his/workspace-repo：多租户仓门面（provider-tenants 守卫）+ git Provider + 种子仓
 │   ├── workspace-anchor/             # @his/workspace-anchor：锚定工具 + pre-step 摘要注入
 │   └── studio-ui/                    # @his/studio-ui：node:http 三栏工作台（端口 7300）
-│       ├── index.js                  #   会话/审批/模型文件/代码仓四类端点 + UI 应答器
-│       └── public/index.html         #   三栏：模型树+代码仓树+审计流水 / 设计+DDL+代码+字段映射图+依赖DAG / 会话流+审批卡片
-└── tests/regression/
-    ├── assert-journey.mjs            # 回归断言：只认 Session Log 事件序列
-    ├── assert-studio-repo.mjs        # P1-5：代码仓端点 + 双可视化数据契约（需 studio 在 :7300）
-    └── e2e-studio.mjs                # studio 表层端到端：chat→轮询→审批回写→落盘验证
+│       ├── index.js                  #   会话/审批/模型/代码仓/租户五类端点 + UI 应答器
+│       └── public/                   #   单文件前端 index.html + vendor/x6.js（ER 图，锁 2.18.1）
+└── tests/regression/                 # 12 套断言：静态单测 + 旅程日志分析 + studio 端点/端到端
 ```
+
+## 前置依赖（跨平台）
+
+| 依赖 | 用途 | Windows 安装 |
+|---|---|---|
+| Node.js ≥ 20、pnpm | 运行时与依赖 | 官网安装包 / `winget install pnpm` |
+| git | 代码仓 Provider 基于真实 git | Git for Windows（自带 Git Bash） |
+| zstd（仅回归断言需要） | 解压会话日志 `session.jsonl.zstd` | `winget install facebook.zstd`；不装则旅程类断言跑不了，纯静态断言不受影响 |
+| DeepSeek API Key | 模型接入 | 问项目维护者要，只走环境变量 |
+
+> Windows 用户注意：下文所有命令给出 **bash（macOS/Linux/Git Bash）** 与 **PowerShell** 两种写法；cmd 不支持多行续行与内联环境变量，不建议用 cmd 执行。
 
 ## 克隆重建（GitHub）
 
 仓库：`github.com/YunSheng-T/his-data-agent-dsh`（private）。会话日志、种子仓、node_modules 均不入库，克隆后按以下步骤重建：
 
 ```bash
-git clone git@github.com:YunSheng-T/his-data-agent-dsh.git && cd his-data-agent-dsh
+git clone git@github.com:YunSheng-T/his-data-agent-dsh.git
+cd his-data-agent-dsh
 
-# 1. 装依赖（插件以 pnpm link: 挂源码，两个 profile 都要装）
-cd dsh-home/profiles/his-data-agent && pnpm install
-cd ../his-studio && pnpm install && cd ../../../..
+# 1. 装依赖（插件以 pnpm link: 挂源码，两个 profile 都要装；逐行执行，全平台通用）
+cd dsh-home/profiles/his-data-agent
+pnpm install
+cd ../his-studio
+pnpm install
+cd ../../..
 
 # 2. 无需手工准备种子仓/会话目录：
-#    runtime/repo-etl 首次启动由 packages/workspace-repo/seed-repo.js 自动重建
+#    runtime/repos/ 首次启动由 packages/workspace-repo/seed-repo.js 自动重建
 #    dsh-home/sessions 随会话自动产生（本地日志，不入库）
 
-# 3. 启动（同下方「运行」节；密钥走 DEEPSEEK_API_KEY 环境变量，问项目维护者要）
+# 3. 启动（见下方「运行」节；密钥走 DEEPSEEK_API_KEY 环境变量）
 ```
 
 ## 运行
 
-```bash
-cd dsh-home/profiles/his-data-agent && pnpm install   # 插件用 link: 挂源码，改码即生效
-cd ../../../..
+bash（macOS / Linux / Git Bash）：
 
+```bash
 # headless（CI / 回归）
-DSH_HOME=$PWD/dsh-home DEEPSEEK_API_KEY=sk-xxx \
+DSH_HOME="$PWD/dsh-home" DEEPSEEK_API_KEY=sk-xxx \
   /path/to/dsh --profile his-data-agent "你的建模任务指令"
-DSH_HOME=$PWD/dsh-home node tests/regression/assert-journey.mjs approve       # 全链路断言
-HIS_REJECT_TOOL=std_create_draft 可测打回路径；断言换 reject-draft 场景
+DSH_HOME="$PWD/dsh-home" node tests/regression/assert-journey.mjs approve   # 全链路断言
+# 打回路径：在上一行前加 HIS_REJECT_TOOL=std_create_draft，断言场景换 reject-draft
 
 # 三栏工作台（浏览器交互）
-DSH_HOME=$PWD/dsh-home DEEPSEEK_API_KEY=sk-xxx \
+DSH_HOME="$PWD/dsh-home" DEEPSEEK_API_KEY=sk-xxx \
   /path/to/dsh --profile his-studio        # 无任务参数，进程常驻
-open http://localhost:7300/                # 左栏模型树/审计，中栏设计/DDL，右栏对话+审批卡片
+open http://localhost:7300/                # Linux 用 xdg-open，或手动开浏览器
 node tests/regression/e2e-studio.mjs       # 表层端到端（需 studio 已在跑）
 ```
+
+PowerShell（Windows，逐行执行；环境变量先 set 再运行，不支持内联前缀）：
+
+```powershell
+$env:DSH_HOME = "$PWD\dsh-home"
+$env:DEEPSEEK_API_KEY = "sk-xxx"
+
+# headless（CI / 回归）
+dsh --profile his-data-agent "你的建模任务指令"
+node tests\regression\assert-journey.mjs approve
+# 打回路径：$env:HIS_REJECT_TOOL = "std_create_draft"，断言场景换 reject-draft
+
+# 三栏工作台（浏览器交互）
+dsh --profile his-studio                   # 无任务参数，进程常驻
+start http://localhost:7300/               # 或手动开浏览器
+node tests\regression\e2e-studio.mjs       # 表层端到端（需 studio 已在跑）
+```
+
+> `/path/to/dsh` 指 dsh CLI 的可执行文件；若装在项目 node_modules 里，bash 用 `node_modules/.bin/dsh`，PowerShell 用 `node_modules\.bin\dsh.cmd`（或 `npx dsh` / `pnpm dlx dsh`）。Code 模式旅程需额外设 `DSH_TOOLS_MODE=code`（bash 内联前缀 / PowerShell `$env:DSH_TOOLS_MODE = "code"`）。
 
 ## 关键约定
 
@@ -123,7 +150,7 @@ node tests/regression/e2e-studio.mjs       # 表层端到端（需 studio 已在
 - **P0 不做子 Agent 就必须显式摘除整套**：`subagent*`/`tool-subagent*`/`tool-jobs`，且级联摘掉注入 `subagents` 服务的 `workflow-worker-thread`/`tool-workflow`/`tool-ralph`，否则 boot 报 "entries did not activate"。不摘的话模型会自主委派子代理并陷入轮询等待；
 - 自建表层创建 Agent 要抄 dsh-headless 四件事：`SessionId()` 包装、`setup` 里 `installModelSelection`、`ctx.get('loader')?.await()` 先行、turn 后 `sessions.flush()`；
 - headless answerer 只在 his-data-agent profile 挂载；his-studio 用 UI 应答器（approval/request 挂成 Promise 等 POST 回写）；
-- 工作台进程用 `pkill -f "dsh --profile his-studio"` 停，kill 后台 shell 的 $! 杀不到 node 子孙；
+- 工作台进程用 `pkill -f "dsh --profile his-studio"` 停（macOS/Linux；Windows PowerShell 用 `Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Where-Object CommandLine -Match 'his-studio' | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }`），kill 后台 shell 的 $! 杀不到 node 子孙；
 - **`DSH_TOOLS_MODE=code` 不进 profile 配置**，是运行时环境变量——headless Code 模式旅程必须显式 export，否则静默退化为普通工具模式（日志里无 tool/code-dispatch 事件）；
 - `tool/code-dispatch` 事件的 `arguments` 是对象（`tool/call` 的是 JSON 字符串），断言脚本要兼容两种；
 - 修改旅程的分支常从当前 HEAD 开出（而非 main），diff 断言要锚定「本次提交」粒度（`commit^..commit`），`main...branch` 会混入基线分支的历史产物；
@@ -146,7 +173,7 @@ node tests/regression/e2e-studio.mjs       # 表层端到端（需 studio 已在
 - `buildDevTools` 新增依赖（hisCicd）用**可选解构 + 执行期兜底报错**，老的多个构造点（测试/旅程/两条 profile）零改动；
 - 「最新会话」类断言不能盲取 mtime 最新——旅程/调试会污染。按内容特征取样（如「最新含分支锚定的会话」）；
 - 守卫（租户/分包只读）写在 **Provider 层硬执行**，UI 层的 toast/半透明只是体验层，防君子不防 Agent；
-- studio 后端重启：`lsof -ti :7300 | xargs kill -9`，`pkill -f` 匹配不到（启动命令行不含可匹配模式）；
+- studio 后端重启：`lsof -ti :7300 | xargs kill -9`（macOS/Linux；Windows PowerShell 用 `Get-NetTCPConnection -LocalPort 7300 | Select-Object -Expand OwningProcess | ForEach-Object { Stop-Process -Id $_ -Force }`），`pkill -f` 匹配不到（启动命令行不含可匹配模式）；
 - 单仓 → 多租户布局用 `renameSync` 原地迁移 + 幂等补种，演示分支/历史全部保留，不要重建；
 - **X6 `Shape.HTML.register` 是全局一次性**：重复注册直接抛错，前端加 `window._erShapeReg` 守卫；重渲染前必须 `graph.dispose()` 先销再建，否则事件委托翻倍；
 - X6 边配置用对象形态（`midSide` anchor / manhattan 路由 / `targetMarker:null`），字符串简写在 2.18.1 下行为不一致；
