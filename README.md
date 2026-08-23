@@ -179,3 +179,4 @@ node tests/regression/e2e-studio.mjs
 - patch 旅程断言引用的仓路径要跟随多租户迁移（`runtime/repo-etl` → `runtime/repos/finance-dw`）。
 - **dsh CLI 本身必须声明进根 `package.json`**：profile 的 `link:` 插件不会带来 dsh；之前 dsh 一直来自仓外旧工程，换台机器 clone 就「找不到 dsh」。跨平台启动用 `scripts/dsh-run.mjs` 包一层（自动指 DSH_HOME、解析 .bin、Windows 走 shell），README 只留一套 `pnpm run` 命令，避免 bash/PowerShell 双份文档漂移；
 - 共享仓被多套断言迁移/补种时，依赖 studio 实时解析的套件要**最先跑**（run-all.mjs 里排序保证），否则读到中间态偶发误报。
+- **`link:` 插件的自身依赖不会被 profile 的 pnpm install 安装**：studio-ui 依赖 `@deepseek-ai/dsh-llm` 等，干净克隆必须单独 `pnpm --dir packages/studio-ui install`（已并入 `pnpm run setup`）——本机一直能跑只是因为包目录里残留着早先手工装的 node_modules；
