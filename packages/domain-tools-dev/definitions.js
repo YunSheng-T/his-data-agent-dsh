@@ -7,6 +7,7 @@ import { parseEtl, parseDag, locateColumn } from './ast.js'
 import { lintEtl, lintDag } from './lint.js'
 import { genEtl, genDag, patchColumn } from './codegen.js'
 import { upstream as lineageUp, downstream as lineageDown, jobsForModel } from './lineage.js'
+import { scanVerdict } from './provider-cicd.js'
 
 const jsonOut = { schema: { type: 'object' }, render: (_a, v) => [{ type: 'text', text: JSON.stringify(v, null, 2) }] }
 const pathParam = { path: { type: 'string', description: '仓内相对路径，如 etl/dwd/dwd_tax_declaration.etl 或 dag/dwd_tax_declaration.dag' } }
@@ -17,7 +18,39 @@ function mustRead(repo, path, view) {
   return text
 }
 
-export function buildDevTools({ repo, dryrun, modeling, sched }) {
+/** 作业 → 模型：@model 埋点优先，targetTable 尾名兜底（与 jobsForModel 同规则） */
+function modelForJob(parsed) {
+  if (parsed.modelFile) return parsed.modelFile
+  const tail = parsed.targetTable?.split('.').pop()
+  return tail ? `${tail}.model` : null
+}
+
+/** 三类扫描（V10）：设计质量 = lint；SQL = 分区 + 危险模式；一致性 = 设计态(模型绑定) ↔ 开发态(代码引用) */
+export function scanEtlJob(repo, modeling, path) {
+  const text = repo.readCommitted(repo.currentBranch(), path)
+  if (text == null) return null
+  const parsed = parseEtl(text)
+  const lint = lintEtl(text, parsed)
+  const design = { pass: lint.pass, errors: lint.issues.filter((i) => i.level === 'error').length, warns: lint.issues.filter((i) => i.level !== 'error').length }
+  const dangers = [parsed.hasDrop && 'DROP', parsed.hasTruncate && 'TRUNCATE', parsed.hasDeleteNoWhere && 'DELETE 无 WHERE', parsed.insertMode === 'OVERWRITE' && !parsed.partition && '无分区全量覆盖'].filter(Boolean)
+  const sql = { pass: !!parsed.partition && parsed.usesPartitionFilter && dangers.length === 0, partition: parsed.partition ?? null, dangers }
+  // 一致性：模型已绑标准而代码未引用 → 差异（可修复项）；模型缺失/无埋点 → pass:null 未知不误报
+  let consistency = { pass: null, reason: '无 @model 埋点且目标表无法推断模型，未做一致性比对' }
+  const mf = modelForJob(parsed)
+  if (mf) {
+    let m = null
+    try { m = modeling.readFields(mf) } catch { /* 模型不在建模空间 */ }
+    if (m) {
+      const codeRefs = new Set(parsed.columns.map((c) => c.stdRef).filter(Boolean).map((s) => s.replace(/^@/, '')))
+      const diffs = m.fields.filter((f) => f.std && !codeRefs.has(f.std))
+        .map((f) => ({ field: f.n, std: f.std, issue: `模型 ${mf} ${m.version} 已绑 ${f.std} · 代码未引用` }))
+      consistency = { pass: diffs.length === 0, model: `${mf} · ${m.version}`, diffs }
+    } else consistency = { pass: null, reason: `模型 ${mf} 不存在于建模空间` }
+  }
+  return { design, sql, consistency }
+}
+
+export function buildDevTools({ repo, dryrun, modeling, sched, cicd }) {
   const writeTools = [
     {
       name: 'etl_codegen', risk: 'workspace-write',
@@ -101,31 +134,38 @@ export function buildDevTools({ repo, dryrun, modeling, sched }) {
     },
   ]
   return [
-    ...readTools({ repo, dryrun, modeling }),
+    ...readTools({ repo, dryrun, modeling, cicd }),
     ...writeTools,
-    ...gatedTools({ repo, sched, modeling }),
+    ...gatedTools({ repo, sched, modeling, cicd }),
   ]
 }
 
-/** gated 闸门组（P1-4）：commit / 上线两个人工闸门 + 上线后的血缘回写 */
-function gatedTools({ repo, sched, modeling }) {
+/** gated 闸门组（P1-4 → P3 数据化）：commit 闸门挂 CICD 流水线 + 上线闸门 + 上线后的血缘回写 */
+function gatedTools({ repo, sched, modeling, cicd }) {
   return [
     {
-      name: 'git_add', risk: 'workspace-write',
-      description: '把指定文件加入 git 暂存区（不改历史，可反复执行）。正式提交用 git_commit',
-      parameters: { type: 'object', properties: { paths: { type: 'array', items: { type: 'string' }, description: '仓内相对路径列表' } }, required: ['paths'] },
-      output: jsonOut,
-      execute: async ({ paths }) => repo.add(paths),
-    },
-
-    {
-      name: 'git_commit', risk: 'commit',
-      description: '【人工闸门 1】提交工作区全部变更到当前分支。提交前必须已完成 lint 与 dry-run 验证；提交后文件才进入已提交视图（其他分支可见性按合并语义）',
+      name: 'repo_commit', risk: 'commit',
+      description: '【人工闸门 1 · 数据化审批】提交工作区全部变更到当前分支（暂存+提交一体，无单独 add 步骤）。提交即自动触发 CICD 流水线（build + 设计质量/SQL/一致性扫描），权威报告用 cicd_scan_report 查询，上线门禁以此为准。提交前必须已完成 lint 与 dry-run 验证；提交后文件才进入已提交视图（其他分支可见性按合并语义）',
       parameters: { type: 'object', properties: { message: { type: 'string', description: '提交信息（建议含作业名与需求号）' } }, required: ['message'] },
       output: jsonOut,
       execute: async ({ message }) => {
         const r = repo.commitAll(message)
-        return { ...r, gate: 'commit', note: r.committed ? '已进入已提交视图' : '无变更未产生提交' }
+        if (!r.committed) return { ...r, gate: 'commit', note: '无变更未产生提交' }
+        // 提交即触发 CICD 流水线：对本次提交的 .etl 现场计算三类扫描快照（演示态本地计算，正式版走 CICD API）
+        const scans = {}
+        for (const f of r.files.filter((x) => x.endsWith('.etl'))) {
+          const s = scanEtlJob(repo, modeling, f)
+          if (s) scans[f] = s
+        }
+        const pipeline = cicd?.trigger({ commitId: r.commitId, branch: r.branch, scans }) ?? null
+        const diffFiles = Object.entries(scans).filter(([, s]) => scanVerdict(s) === 'diff').map(([f]) => f)
+        return {
+          ...r, gate: 'commit',
+          pipeline: pipeline && { id: pipeline.id, ruleset: pipeline.ruleset, scanned: Object.keys(scans), verdict: diffFiles.length ? 'diff' : 'pass' },
+          note: pipeline
+            ? `已进入已提交视图 · CICD 流水线 #${pipeline.id} 自动触发（规则集 ${pipeline.ruleset}）· 权威结论 ${diffFiles.length ? `⚠ 差异: ${diffFiles.join(', ')}` : 'PASS'}`
+            : '已进入已提交视图',
+        }
       },
     },
 
@@ -172,8 +212,30 @@ function gatedTools({ repo, sched, modeling }) {
   ]
 }
 
-function readTools({ repo, dryrun, modeling }) {
+function readTools({ repo, dryrun, modeling, cicd }) {
   return [
+    {
+      name: 'cicd_scan_report', risk: 'read',
+      description: '查询作业的 CICD 权威扫描报告：流水线号 + 规则集版本 + 设计质量/SQL/设计态↔开发态一致性三类结论。扫描的权威执行者是 CICD 流水线，本工具只做订阅解读；未提交的文件没有报告。一致性差异修复路径：etl_patch 补标准引用 → repo_commit（自动触发新流水线）→ 本工具复扫确认清零',
+      parameters: { type: 'object', properties: pathParam, required: ['path'] },
+      output: jsonOut,
+      execute: async ({ path }) => {
+        if (!cicd) throw new Error('CICD 适配器未挂载')
+        const branch = repo.currentBranch()
+        if (repo.readCommitted(branch, path) == null) throw new Error(`文件不存在于已提交视图: ${path}（未提交的文件没有流水线报告）`)
+        const hit = cicd.latestFor(path, branch) ?? cicd.latestFor(path)
+        if (!hit) return { path, report: null, note: '该作业暂无流水线报告（未被任何流水线覆盖）' }
+        const dirty = repo.status().some((s) => s.path === path)
+        return {
+          path,
+          pipeline: hit.pipeline,
+          scans: hit.scan,
+          verdict: scanVerdict(hit.scan),
+          note: dirty ? '工作区存在未提交修改：报告基于最近流水线快照，提交后复扫以清零差异' : '权威报告 · 与已提交态一致',
+        }
+      },
+    },
+
     {
       name: 'repo_checkout', risk: 'read',
       description: '切换代码仓分支定位（只读语义：不改任何文件内容；分支隔离由 git 保证）。返回该分支目录树',
@@ -246,7 +308,7 @@ function readTools({ repo, dryrun, modeling }) {
         return {
           model, currentVersion: summary.version, jobs,
           staleCount: jobs.filter((j) => j.stale === true).length,
-          note: 'stale 作业修复路径：etl_codegen 重新生成（注释携带最新标准引用）→ code_lint → test_dryrun → git_commit → sched_publish；stale=null 表示作业无 @model 版本埋点，需人工确认',
+          note: 'stale 作业修复路径：etl_codegen 重新生成（注释携带最新标准引用）→ code_lint → test_dryrun → repo_commit → sched_publish；stale=null 表示作业无 @model 版本埋点，需人工确认',
         }
       },
     },

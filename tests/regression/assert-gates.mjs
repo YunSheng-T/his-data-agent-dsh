@@ -1,4 +1,4 @@
-// gated 闸门断言（P1-4）：git_add/git_commit/sched_publish/asset_sync 的无模型语义验证
+// gated 闸门断言（P1-4 → P3）：repo_commit/sched_publish/asset_sync 的无模型语义验证（git_add 已并入 repo_commit，git.* 清零）
 // 用法：node tests/regression/assert-gates.mjs
 import fs from 'node:fs'
 import os from 'node:os'
@@ -8,12 +8,14 @@ import { SEED_FILES } from '../../packages/workspace-repo/seed-repo.js'
 import { provider as modeling } from '../../packages/domain-tools-modeling/provider-mock.js'
 import { LocalSimDryrunProvider } from '../../packages/domain-tools-dev/provider-dryrun.js'
 import { LocalSchedProvider } from '../../packages/domain-tools-dev/provider-sched.js'
+import { LocalCicdProvider } from '../../packages/domain-tools-dev/provider-cicd.js'
 import { buildDevTools } from '../../packages/domain-tools-dev/definitions.js'
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'his-gates-'))
 const repo = new GitRepoProvider(dir).init(SEED_FILES)
 const sched = new LocalSchedProvider()
-const tools = new Map(buildDevTools({ repo, modeling, dryrun: new LocalSimDryrunProvider(), sched }).map((t) => [t.name, t]))
+const cicd = new LocalCicdProvider()
+const tools = new Map(buildDevTools({ repo, modeling, dryrun: new LocalSimDryrunProvider(), sched, cicd }).map((t) => [t.name, t]))
 const call = (name, args) => tools.get(name).execute(args)
 
 const checks = []
@@ -31,13 +33,10 @@ const pubEarly = await call('sched_publish', { dagPath: DAG })
 check('未提交态上线被拒（无副作用）', pubEarly.published === false && pubEarly.blocked === true, pubEarly.reason)
 check('调度注册表仍为空', sched.list().length === 0)
 
-// 3. git_add（workspace-write，可反复）
-const ga = await call('git_add', { paths: [JOB, DAG] })
-check('git_add 暂存两文件', ga.staged.length === 2)
-
-// 4. git_commit（gated 工具的本体语义）
-const gc = await call('git_commit', { message: 'feat(FIN-3302): dwd_tax_declaration v2 作业 + 调度' })
-check('git_commit 提交成功', gc.committed === true && gc.files.length === 2, gc.commitId)
+// 3. repo_commit（暂存+提交一体，gated 工具的本体语义；提交即自动触发 CICD 流水线）
+const gc = await call('repo_commit', { message: 'feat(FIN-3302): dwd_tax_declaration v2 作业 + 调度' })
+check('repo_commit 提交成功', gc.committed === true && gc.files.length === 2, gc.commitId)
+check('提交自动触发 CICD 流水线（数据化审批依据）', gc.pipeline?.id > 4820 && gc.pipeline.ruleset === 'v1.2', `pipeline #${gc.pipeline?.id}`)
 check('提交后已提交视图可见', repo.readCommitted('feature/dwd-v2', JOB) !== null)
 check('main 仍不可见（未合并）', repo.readCommitted('main', JOB) === null)
 
@@ -57,7 +56,7 @@ void m
 // 7. 危险代码上线被拒
 repo.writeWorking('etl/dwd/evil2.etl', '-- @job: evil2\n-- @engine: hive-sql\nINSERT OVERWRITE TABLE dwd.x\nSELECT a FROM ods.y WHERE dt=\'1\';\nDROP TABLE dwd.old;\n')
 repo.writeWorking('dag/evil2.dag', 'ref: etl/dwd/evil2.etl\ncron: "1 1 * * *"\ntimeout: 60\n')
-await call('git_commit', { message: 'bad' })
+await call('repo_commit', { message: 'bad' })
 const pubEvil = await call('sched_publish', { dagPath: 'dag/evil2.dag' })
 check('危险作业上线被拒（lint error + DROP）', pubEvil.published === false && pubEvil.blocked === true)
 

@@ -198,13 +198,59 @@ input,textarea,select{font-family:inherit}
 
 .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--paper);font-size:12px;padding:8px 16px;border-radius:99px;opacity:0;pointer-events:none;transition:all .35s;z-index:99}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* V11 · 租户下拉（顶栏） */
+.tenant-dd{position:relative}
+.tenant-dd .link{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;color:var(--muted);border:1px solid var(--hair);border-radius:99px;padding:3px 10px}
+.tenant-dd .link b{font-weight:600;color:var(--ink)}
+.tenant-dd .dd-menu{position:absolute;top:calc(100% + 6px);right:0;background:#fffdf8;border:1px solid var(--hair);border-radius:10px;min-width:200px;box-shadow:0 8px 24px rgba(11,11,11,.12);z-index:50;overflow:hidden}
+.dd-item{display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:9px 14px;font-size:12px;color:var(--ink)}
+.dd-item:hover{background:var(--paper-deep)}
+.dd-item.on{background:var(--paper-deep);font-weight:600}
+.dd-item .dd-repo{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--faint)}
+
+/* V10 · 分包徽标 + 扫描状态点 + 未接入只读 */
+.pkg-badge{font-size:9px;letter-spacing:.06em;border:1px solid var(--hair);border-radius:4px;padding:0 5px;color:var(--muted);font-family:var(--sans);flex:none}
+.pkg-badge.off{color:var(--faint);border-style:dashed}
+.td-head .pkg-badge{margin-left:6px}
+.scan-dot{margin-left:auto;font-family:var(--mono);font-size:9.5px;flex:none}
+.scan-dot.pass{color:var(--ok)}
+.scan-dot.diff{color:var(--warn)}
+.tnode.legacy{opacity:.5}
+.tnode.legacy:hover{background:none}
+.tnode .layer.off{border-style:dashed;color:var(--faint)}
+.empty-tenant{max-width:520px;margin:60px auto;text-align:center}
+.empty-tenant .et-ico{font-size:28px;margin-bottom:10px}
+
+/* V12 · X6 ER 表节点（HTML shape） */
+.er-x6-box{border:1px solid var(--hair);border-radius:10px;background:#fbfaf6;overflow:hidden}
+.er-node{border:1px solid rgba(11,11,11,.35);border-radius:8px;background:#fffdf8;overflow:hidden;font-family:var(--sans);cursor:pointer;height:100%}
+.er-node.main{border-color:#0b0b0b;border-width:1.4px}
+.er-node .er-head{padding:6px 10px;border-bottom:1px solid var(--hair-soft);background:var(--paper)}
+.er-node .er-head .en{font-family:var(--mono);font-size:10.5px;font-weight:700}
+.er-node .er-head .es{font-size:9px;color:var(--muted);display:flex;gap:6px}
+.er-row{display:flex;align-items:center;gap:6px;padding:3px 10px;font-size:10px;border-bottom:1px solid var(--hair-soft);cursor:pointer}
+.er-row:last-child{border-bottom:none}
+.er-row:hover{background:var(--paper-deep)}
+.er-row.sel{background:#ece7dc;box-shadow:inset 2px 0 0 var(--ink)}
+.er-row .ft{font-family:var(--mono);font-size:8.5px;color:var(--faint);width:64px;flex:none;overflow:hidden;text-overflow:ellipsis}
+.er-row .fn2{font-family:var(--mono);font-size:10px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis}
+.er-row .pk2{font-family:var(--mono);font-size:8px;color:var(--warn);border:1px solid rgba(154,106,20,.4);border-radius:3px;padding:0 3px;flex:none}
+.er-row .std2{font-family:var(--mono);font-size:8.5px;color:var(--ok);flex:none}
+.er-row .std2.add{color:var(--warn);border:1px dashed rgba(154,106,20,.55);border-radius:99px;padding:0 6px}
+.er-row .std2.skip2{color:var(--faint)}
 </style>
+<script src="/vendor/x6.js"></script>
 </head>
 <body>
 <div class="topbar">
   <div class="wordmark">HIS Data Agent<em>DATA STUDIO</em></div>
   <span class="vr"></span>
   <span class="crumb" id="crumb">财税域 · 数据建模</span>
+  <div class="tenant-dd">
+    <button class="link" id="tenant-btn" title="租户 · 点击切换">tenant · <b id="tenant-label">finance</b> <span style="font-size:9px">▾</span></button>
+    <div class="dd-menu" id="tenant-menu" style="display:none"></div>
+  </div>
   <div class="right"><span class="tlabel">宿主平台 · 深嵌</span><span class="tlabel green" id="gate-label">高危拦截 · 开启</span></div>
 </div>
 <div class="ide">
@@ -301,6 +347,40 @@ document.querySelectorAll('#menu button[data-mode]').forEach((b) => b.addEventLi
   renderChips();
 }));
 
+/* ================= 租户（V11 · 顶栏下拉，全链路跟随） ================= */
+let tenantState = { tenants: [], current: { id: 'finance', repo: 'finance-dw', dataTenant: true } };
+async function loadTenants() {
+  const d = await api('/api/tenants');
+  if (d.error) return;
+  tenantState = d;
+  $('#tenant-label').textContent = d.current.id;
+  $('#tenant-menu').innerHTML = d.tenants.map((t) =>
+    `<button class="dd-item ${t.id === d.current.id ? 'on' : ''}" data-t="${t.id}">${t.id} · ${esc(t.cn)}<span class="dd-repo">${esc(t.repo)}</span></button>`).join('');
+  document.querySelectorAll('#tenant-menu .dd-item').forEach((b) => b.addEventListener('click', () => switchTenant(b.dataset.t)));
+}
+$('#tenant-btn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  const m = $('#tenant-menu');
+  m.style.display = m.style.display === 'none' ? 'block' : 'none';
+});
+document.addEventListener('click', () => { $('#tenant-menu').style.display = 'none'; });
+async function switchTenant(t) {
+  $('#tenant-menu').style.display = 'none';
+  if (t === tenantState.current.id) return;
+  const r = await api('/api/repo/tenant', { method: 'POST', body: JSON.stringify({ tenant: t }) });
+  if (r.error) { toast('租户切换失败: ' + r.error); return; }
+  tenantState.current = r.current;
+  await loadTenants();
+  toast(`已切到租户 ${t}（${r.current.cn}）`);
+  // 全链路跟随：仓树/页签/工作区/面包屑/快捷指令
+  repoCache = {};
+  openFiles = openFiles.filter((f) => f.kind !== 'repo');
+  if (active.kind === 'repo') active = { kind: null, file: null };
+  await loadRepoTree(); renderFileTabs(); renderWorkspace(); renderChips();
+  if (sessionId && r.current.dataTenant) send(`workspace_anchor ${r.branch} .`, true);
+}
+const inDataTenant = () => tenantState.current.dataTenant !== false;
+
 /* ================= 左栏：模型树 ================= */
 async function loadModels() {
   const d = await api('/api/models');
@@ -312,24 +392,45 @@ async function loadModels() {
       <span class="st-dot ${m.published ? 'pub' : 'draft'}"></span></button>`).join('')}</div>`;
 }
 
-/* ================= 左栏：代码仓树 ================= */
+/* ================= 左栏：代码仓树（V10 分包投影 + 扫描点） ================= */
 async function loadRepoTree() {
   repoState = await api('/api/repo/tree');
   const sel = $('#branch-sel');
   sel.innerHTML = repoState.branches.map((b) => `<option value="${b}" ${b === repoState.current ? 'selected' : ''}>⑂ ${b}</option>`).join('');
-  if (mode === 'dev') $('#crumb').textContent = `财税域 · 数据开发 · ${repoState.current}`;
+  const tn = repoState.tenant ?? tenantState.current;
+  if (mode === 'dev') $('#crumb').textContent = `tenant ${tn.id} · ${tn.repo} · ${repoState.current}`;
+  // 空租户（V11）：暂无作业占位
+  if (!repoState.tree.length) {
+    $('#repo-tree').innerHTML = `<div class="empty-tenant" style="margin:30px auto;padding:0 16px">
+      <div class="et-ico">◌</div><p style="font-size:12px;font-weight:600">暂无作业</p>
+      <p class="note">租户 ${esc(tn.id)}（${esc(tn.cn ?? '')}）的仓 ${esc(tn.repo)} 为空。<br>权限与数据按租户隔离，新建作业请切回数据租户。</p></div>`;
+    return;
+  }
+  // 按分包投影分组：etl/ → 主力 ETL 平台；dag/ → 调度平台；etl_legacy/ → 未接入只读
   const groups = {};
   for (const e of repoState.tree) {
-    const dir = e.path.split('/').slice(0, -1).join('/') || '.';
-    (groups[dir] ??= []).push(e);
+    const top = e.path.split('/')[0];
+    (groups[top] ??= []).push(e);
   }
-  $('#repo-tree').innerHTML = Object.entries(groups).map(([dir, files]) => `
-    <div class="tree-domain"><div class="td-head mono">${dir}/<span class="cnt">${files.length}</span></div>
-    ${files.map((e) => `<button class="tnode ${active.kind === 'repo' && e.path === active.file ? 'on' : ''}" onclick="openFile('repo','${e.path}')">
-      <span class="layer">${e.kind === 'dag' ? 'DAG' : 'ETL'}</span>${e.path.split('/').pop()}
+  $('#repo-tree').innerHTML = Object.entries(groups).map(([top, files]) => {
+    const pkg = (repoState.packages ?? []).find((p) => p.prefix === top + '/');
+    const off = pkg && !pkg.connected;
+    return `<div class="tree-domain"><div class="td-head mono">${top}/
+      ${pkg ? `<span class="pkg-badge ${off ? 'off' : ''}">${off ? '未接入 · 只读' : esc(pkg.platform)}</span>` : ''}
+      <span class="cnt">${files.length}</span></div>
+    ${files.map((e) => {
+      const legacy = off || e.pkg?.connected === false;
+      return `<button class="tnode ${legacy ? 'legacy' : ''} ${active.kind === 'repo' && e.path === active.file ? 'on' : ''}" data-path="${esc(e.path)}" data-legacy="${legacy ? 1 : ''}">
+      <span class="layer ${legacy ? 'off' : ''}">${e.kind === 'dag' ? 'DAG' : 'ETL'}</span>${e.path.split('/').pop()}
+      ${!legacy && e.scan ? `<span class="scan-dot ${e.scan}" title="CICD 扫描 · 权威报告">${e.scan === 'pass' ? '✓' : '⚠差异'}</span>` : ''}
       ${e.stale ? '<span class="dirty-badge" title="模型 ' + esc(e.stale.model) + ' 已升至 ' + esc(e.stale.currentVersion) + '，本作业基线 ' + esc(e.stale.baseVersion) + '">模型已更新</span>' : ''}
       ${e.uncommitted ? '<span class="dirty-badge new">新增</span>' : e.dirty ? `<span class="dirty-badge">${e.dirty}</span>` : ''}
-    </button>`).join('')}</div>`).join('');
+    </button>`; }).join('')}</div>`;
+  }).join('');
+  document.querySelectorAll('#repo-tree .tnode').forEach((b) => b.addEventListener('click', () => {
+    if (b.dataset.legacy) { toast('该平台未接入 Agent 工作范围 · 仅只读浏览'); return; }
+    openFile('repo', b.dataset.path);
+  }));
 }
 $('#branch-sel').addEventListener('change', async (e) => {
   const r = await api('/api/repo/checkout', { method: 'POST', body: JSON.stringify({ branch: e.target.value }) });
@@ -345,6 +446,11 @@ $('#branch-sel').addEventListener('change', async (e) => {
 
 /* ================= 文件页签（多开） ================= */
 function openFile(kind, file) {
+  // 未接入分包守卫（V10）：只读浏览，不锚定不打开
+  if (kind === 'repo') {
+    const ent = repoState.tree.find((e) => e.path === file);
+    if (ent?.pkg?.connected === false) { toast('该平台未接入 Agent 工作范围 · 仅只读浏览'); return; }
+  }
   active = { kind, file };
   if (!openFiles.some((f) => f.kind === kind && f.file === file)) openFiles.push({ kind, file });
   activeTab = null;
@@ -444,31 +550,98 @@ async function viewDesign(m) {
     <div class="lint-list">${lintListRows(m, lint)}</div>
     ${jobRefs ? `<div class="sec-title">生产作业引用 <span class="tlabel">开发空间回写</span></div>${jobRefs}` : ''}`;
 }
-function viewER(m) {
-  const byFile = Object.fromEntries(modelsCache.map((x) => [x.file, x]));
-  const box = (x, y, w, name, sub, ver, main) => `
-    <rect x="${x}" y="${y}" width="${w}" height="64" rx="7" fill="#fbfaf6" stroke="${main ? '#0b0b0b' : 'rgba(11,11,11,.35)'}" stroke-width="${main ? 1.4 : 1}"/>
-    <text x="${x + w / 2}" y="${y + 24}" text-anchor="middle" font-size="10.5" font-family="monospace" fill="#0b0b0b">${esc(name)}</text>
-    <text x="${x + w / 2}" y="${y + 40}" text-anchor="middle" font-size="8.5" font-family="monospace" fill="#6d6a64">${esc(sub)}</text>
-    <text x="${x + w / 2}" y="${y + 54}" text-anchor="middle" font-size="8" font-family="monospace" fill="#9a6a14">${esc(ver)}</text>`;
-  if (m.model !== 'dwd_tax_declaration') {
-    $('#ws-body').innerHTML = `<div class="sec-title">ER 图 <span class="tlabel">${esc(m.domain)}</span></div>
-      <div class="er-box"><svg viewBox="0 0 340 120" style="width:100%;max-width:520px;display:block;margin:auto">
-      ${box(100, 28, 150, m.model, `${m.cn} · ${m.fields.length} 属性`, `${m.version} · ${m.published ? '已发布' : '草稿'}`, true)}
-      </svg></div><p class="note">该模型暂无外向关系。锚定 dwd_tax_declaration.model 可查看完整域内 ER。</p>`;
-    return;
+/* ----- V12 · ER 图（AntV X6 · HTML shape 表节点 · 属性级锚定） ----- */
+let erGraph = null;      // X6 Graph 实例（重渲染纪律：先 dispose 再重建）
+let erDetails = {};      // file -> 模型详情（节点内容单一事实源）
+let erSel = null;        // 属性级锚定：{file, field, fieldData}
+const ER_W = 286, ER_HEAD = 40, ER_ROW = 24;
+async function viewER() {
+  // 节点内容从模型服务实时拉取（单一事实源），3 实体全量渲染
+  erDetails = {};
+  await Promise.all(modelsCache.map(async (x) => {
+    const d = await api('/api/models/' + encodeURIComponent(x.file));
+    if (!d.error) erDetails[x.file] = d;
+  }));
+  $('#ws-body').innerHTML = `<div class="sec-title">ER 图 <span class="tlabel">AntV X6 · 属性行可点击锚定</span></div>
+    <div class="er-x6-box"><div id="er-x6" style="width:100%;height:660px"></div></div>
+    <p class="note">ER 图由开源图引擎 AntV X6 渲染：<b>每个属性行都可点击</b>——点击即把右侧 Agent 锚定到「模型 · 字段」粒度并行高亮；未绑定标准的行内可直接点「＋ 补全标准」（gated，需你确认）；点实体头锚定整个模型。绑标准、改字段后此图整图重建同步。</p>`;
+  renderErGraph();
+}
+function erNodeHTML(d) {
+  const rows = (d.fields ?? []).map((f) => `<div class="er-row" data-er-field="${esc(d.file)}|${esc(f.n)}">
+    <span class="ft">${esc(f.t)}</span><span class="fn2">${esc(f.n)}</span>
+    ${f.pk ? '<span class="pk2">PK</span>' : ''}
+    ${f.std ? `<span class="std2">✓ ${esc(f.std)}</span>`
+      : f.skip ? `<span class="std2 skip2">— 免绑</span>`
+      : `<button class="std2 add" data-er-add="${esc(d.file)}|${esc(f.n)}">＋ 补全标准</button>`}
+  </div>`).join('');
+  return `<div class="er-node ${d.file === active.file ? 'main' : ''}" data-er-node="${esc(d.file)}">
+    <div class="er-head" data-er-head="${esc(d.file)}"><div class="en">${esc(d.model ?? d.name)}</div>
+    <div class="es"><span>${esc(d.cn ?? '')}</span><span>${esc(d.version)}${d.published ? ' · 已发布' : ' · 草稿'}</span></div></div>
+    ${rows}</div>`;
+}
+function renderErGraph() {
+  const el = document.getElementById('er-x6');
+  if (!el || !window.X6) { if (el) el.innerHTML = '<p class="note">图引擎未加载（/vendor/x6.js）</p>'; return; }
+  // 重渲染纪律：先 dispose 再重建，避免状态残留
+  if (erGraph) { erGraph.dispose(); erGraph = null; }
+  // shape 注册是全局的，重复注册会抛错——只注册一次（对齐原型纪律）
+  if (!window._erShapeReg) {
+    X6.Shape.HTML.register({ shape: 'er-table', width: ER_W, height: 120, effect: ['data'], html: (cell) => erNodeHTML(erDetails[cell.getData().file]) });
+    window._erShapeReg = true;
   }
-  const dim = byFile['dim_taxpayer.model'], pay = byFile['dwd_tax_payment.model'];
-  $('#ws-body').innerHTML = `<div class="sec-title">ER 图 <span class="tlabel">${esc(m.domain)} · 3 模型</span></div>
-    <div class="er-box"><svg viewBox="0 0 640 240" style="width:100%;display:block">
-    ${box(20, 30, 150, 'dim_taxpayer', `纳税主体 · 维表 · ${dim?.total ?? 8} 属性`, `${dim?.version ?? 'v1.2'} · 已发布`, false)}
-    ${box(300, 30, 190, 'dwd_tax_declaration', `申报记录 · 事实 · ${m.fields.length} 属性`, `${m.version} · ${m.published ? '已发布' : '草稿'}`, true)}
-    ${box(300, 150, 190, 'dwd_tax_payment', `缴款流水 · 事实 · ${pay?.total ?? 7} 属性`, `${pay?.version ?? 'v1.0'} · ${pay?.published ? '已发布' : '草稿'}`, false)}
-    <line x1="170" y1="62" x2="300" y2="62" stroke="rgba(11,11,11,.45)" stroke-width="1"/>
-    <text x="235" y="54" text-anchor="middle" font-size="9" font-family="monospace" fill="#6d6a64">1 : n · taxpayer_id</text>
-    <line x1="395" y1="94" x2="395" y2="150" stroke="rgba(11,11,11,.45)" stroke-width="1"/>
-    <text x="408" y="126" font-size="9" font-family="monospace" fill="#6d6a64">1 : n · decl_id</text>
-    </svg></div><p class="note">关系：纳税主体 1:n 申报记录 1:n 缴款流水。版本与属性数取自模型服务实时状态。</p>`;
+  const g = new X6.Graph({ container: el, background: { color: '#fbfaf6' }, interacting: false });
+  const files = Object.keys(erDetails);
+  const hOf = (f) => ER_HEAD + (erDetails[f].fields?.length ?? 0) * ER_ROW + 12;
+  // 布局：维表居左，事实表居右按实际高度堆叠
+  const dims = Object.fromEntries(files.map((f) => [f, hOf(f)]));
+  const pos = {};
+  let fy = 24;
+  for (const f of files) {
+    if (f.startsWith('dim_')) pos[f] = { x: 30, y: 24 };
+    else { pos[f] = { x: 430, y: fy }; fy += dims[f] + 64; }
+  }
+  for (const file of files) {
+    const d = erDetails[file];
+    g.addNode({ shape: 'er-table', id: d.model ?? d.name, x: pos[file].x, y: pos[file].y, width: ER_W, height: dims[file], data: { file } });
+  }
+  // 关系线：双方实体在场才画（manhattan 路由 + rounded 连接 + 边标签）
+  const has = (f) => files.includes(f);
+  const nameOf = (f) => erDetails[f].model ?? erDetails[f].name;
+  const mkEdge = (a, aSide, b, bSide, label) => g.addEdge({
+    source: { cell: a, anchor: { name: 'midSide', args: { side: aSide } } },
+    target: { cell: b, anchor: { name: 'midSide', args: { side: bSide } } },
+    router: { name: 'manhattan' }, connector: { name: 'rounded' },
+    attrs: { line: { stroke: '#6d6a64', strokeWidth: 1, targetMarker: null } },
+    labels: [{ attrs: { label: { text: label, fill: '#6d6a64', fontSize: 10, fontFamily: 'JetBrains Mono, monospace' }, body: { fill: '#fbfaf6', stroke: '#e3ded3' } } }],
+  });
+  if (has('dim_taxpayer.model') && has('dwd_tax_declaration.model')) mkEdge(nameOf('dim_taxpayer.model'), 'right', nameOf('dwd_tax_declaration.model'), 'left', '1 : n · taxpayer_id');
+  if (has('dwd_tax_declaration.model') && has('dwd_tax_payment.model')) mkEdge(nameOf('dwd_tax_declaration.model'), 'bottom', nameOf('dwd_tax_payment.model'), 'top', '1 : n · decl_id');
+  // 属性行事件委托（真 DOM 可挂事件）
+  el.onclick = (ev) => {
+    const add = ev.target.closest('[data-er-add]');
+    if (add) { // 行内业务入口：＋ 补全标准
+      const [file, field] = add.dataset.erAdd.split('|');
+      anchorField(file, field);
+      const fd = erDetails[file]?.fields?.find((x) => x.n === field);
+      send(`给 ${file} 的字段 ${field}（${fd?.c ?? ''}）补全数据标准：先 std_search 找候选，命中则调 model_bind_std 绑定（写操作需我确认），无候选则建议先起草标准`);
+      return;
+    }
+    const row = ev.target.closest('[data-er-field]');
+    if (row) { const [file, field] = row.dataset.erField.split('|'); anchorField(file, field); return; }
+    const head = ev.target.closest('[data-er-head]');
+    if (head) { erSel = null; openFile('model', head.dataset.erHead); }
+  };
+  erGraph = g;
+}
+/** 属性级锚定（V12）：锚定栏显示「模型 · 字段」粒度 + 行高亮 + 快捷指令切换 */
+function anchorField(file, field) {
+  const fd = erDetails[file]?.fields?.find((x) => x.n === field);
+  erSel = { file, field, fieldData: fd };
+  anchorObj = `${file} · ${field}`;
+  $('#anchor-obj').textContent = anchorObj;
+  document.querySelectorAll('.er-row').forEach((r) => r.classList.toggle('sel', r.dataset.erField === `${file}|${field}`));
+  renderChips();
 }
 function viewDDL(m) {
   $('#ws-body').innerHTML = `<div class="sec-title">DDL <span class="tlabel">由模型生成 · ${m.version}</span></div>
@@ -508,6 +681,17 @@ async function repoFile(p) {
   return repoCache[p];
 }
 async function renderRepoWs() {
+  const tn = repoState.tenant ?? tenantState.current;
+  // 空租户占位视图（V11）：权限按租户隔离说明 + 切回引导
+  if (!repoState.tree.length) {
+    $('#ws-title').textContent = `租户 ${tn.id}`; $('#ws-ver').style.display = 'none';
+    $('#ws-domain').innerHTML = `<span class="tlabel" style="text-transform:none">tenant://${esc(tn.id)}/${esc(tn.repo)}</span>`;
+    $('#sub-tabs').innerHTML = '';
+    $('#ws-body').innerHTML = `<div class="empty-tenant"><div class="et-ico">◌</div>
+      <p style="font-size:13px;font-weight:600">租户 ${esc(tn.id)} · 暂无作业</p>
+      <p class="note">仓 ${esc(tn.repo)} 为空。权限与数据按租户隔离；该租户未接入数据开发范围（只读浏览）。<br>要新建或修改作业，请从顶栏切回 finance 租户。</p></div>`;
+    return;
+  }
   const f = await repoFile(active.file);
   if (f.error) { $('#ws-title').textContent = '文件不可读'; $('#ws-body').textContent = f.error; $('#sub-tabs').innerHTML = ''; return; }
   renderSubTabs('repo', f.kind);
@@ -516,7 +700,7 @@ async function renderRepoWs() {
   const v = $('#ws-ver'); v.style.display = '';
   v.textContent = ent?.stale ? `模型已更新 ${ent.stale.baseVersion}→${ent.stale.currentVersion}` : ent?.uncommitted ? '未提交 · 新增' : ent?.dirty ? `未提交修改 · ${ent.dirty}` : '已提交';
   v.className = 'ws-ver' + (!ent?.dirty && !ent?.uncommitted && !ent?.stale ? ' published' : '');
-  $('#ws-domain').innerHTML = `<span class="tlabel">repo-etl</span> <span class="tlabel">${esc(repoState.current)}</span>`;
+  $('#ws-domain').innerHTML = `<span class="tlabel" style="text-transform:none" title="对象全地址">tenant://${esc(tn.id)}/${esc(tn.repo)}</span> <span class="tlabel">${esc(repoState.current)}</span>${ent?.pkg ? ` <span class="pkg-badge ${ent.pkg.connected ? '' : 'off'}">${esc(ent.pkg.platform)}</span>` : ''}`;
   if (f.kind === 'dag') return activeTab === 'graph' ? viewDagGraph(f) : viewDagYaml(f);
   if (activeTab === 'flow') return viewFlow(f);
   if (activeTab === 'code') return viewCode(f);
@@ -832,18 +1016,43 @@ function renderAudit() {
 
 /* ================= 快捷指令 ================= */
 function renderChips() {
-  let chips;
-  if (mode === 'dev') {
-    if (active.kind === 'repo' && active.file?.endsWith('.etl')) chips = ['检查这段代码的规范性', '做 dry-run 采样验证', '提交并上线（需两次确认）'];
-    else if (active.kind === 'repo') chips = ['这个调度的上下游是什么', '上线这个调度作业'];
-    else chips = ['新建 dwd 层作业的 ETL 与调度'];
+  let chips; // [{label, prompt?, action?}]：action 直接执行，prompt 直接发送，缺省填入输入框
+  if (!inDataTenant()) {
+    // V11 防迷路：非数据租户下的唯一引导
+    chips = [{ label: '切回 finance 租户继续', action: () => switchTenant('finance') }];
+  } else if (mode === 'dev') {
+    if (active.kind === 'repo' && active.file?.endsWith('.etl')) {
+      const ent = repoState.tree.find((e) => e.path === active.file);
+      chips = [
+        // V10「扫描这个作业」：权威报告 → 三类扫描 → 差异修复 → 复扫清零
+        ...(ent?.scan ? [{ label: '扫描这个作业 · 三类扫描', prompt: `扫描这个作业 ${active.file}：用 cicd_scan_report 取 CICD 权威报告（流水线号+规则集版本），逐条解读设计质量 / SQL / 一致性三类结论；若一致性有差异，翻译成修复方案并在我确认后用 etl_patch 应用，然后引导我 repo_commit 提交复扫清零` }] : []),
+        { label: '检查这段代码的规范性' },
+        { label: '做 dry-run 采样验证' },
+        { label: '提交并上线（需两次确认）' },
+      ];
+    } else if (active.kind === 'repo') chips = [{ label: '这个调度的上下游是什么' }, { label: '上线这个调度作业' }];
+    else chips = [{ label: '新建 dwd 层作业的 ETL 与调度' }];
   } else {
-    chips = active.kind === 'model'
-      ? ['分析未绑定字段并批量绑定', '生成 DDL 核对标准引用', '提交新版本并登记资产']
-      : ['治理 dwd_tax_declaration 的标准绑定'];
+    const fd = erSel?.fieldData;
+    if (erSel?.field && fd && !fd.std && !fd.skip) {
+      // V12 bindfield：未绑定属性 → 补全标准
+      chips = [{ label: `给 ${erSel.field} 补全数据标准`, prompt: `给 ${erSel.file} 的字段 ${erSel.field}（${fd.c ?? ''}）补全数据标准：先 std_search 找候选，命中则调 model_bind_std 绑定（写操作需我确认），无候选则建议先起草标准` }, { label: '分析未绑定字段并批量绑定' }];
+    } else if (erSel?.field && fd?.std) {
+      // V12 fieldinfo：已绑定属性 → 口径 + 影响分析
+      chips = [{ label: `${erSel.field} · 标准口径与影响分析`, prompt: `字段 ${erSel.file} 的 ${erSel.field} 已绑定 ${fd.std}：说明该标准口径，并用 lineage_downstream / impact_check 分析它的下游作业影响面` }, { label: '分析未绑定字段并批量绑定' }];
+    } else {
+      chips = active.kind === 'model'
+        ? [{ label: '分析未绑定字段并批量绑定' }, { label: '生成 DDL 核对标准引用' }, { label: '提交新版本并登记资产' }]
+        : [{ label: '治理 dwd_tax_declaration 的标准绑定' }];
+    }
   }
-  $('#a-chips').innerHTML = chips.map((c) => `<button class="a-chip">${esc(c)}</button>`).join('');
-  document.querySelectorAll('.a-chip').forEach((b) => b.addEventListener('click', () => { $('#prompt').value = b.textContent; $('#prompt').focus(); }));
+  $('#a-chips').innerHTML = chips.map((c, i) => `<button class="a-chip" data-i="${i}">${esc(c.label)}</button>`).join('');
+  document.querySelectorAll('.a-chip').forEach((b) => b.addEventListener('click', () => {
+    const c = chips[+b.dataset.i];
+    if (c.action) { c.action(); return; }
+    if (c.prompt) { send(c.prompt); return; }
+    $('#prompt').value = c.label; $('#prompt').focus();
+  }));
 }
 
 /* ================= 会话 ================= */
@@ -893,7 +1102,7 @@ async function poll() {
 }
 setInterval(() => { poll(); }, 1500);
 
-loadModels(); loadRepoTree(); loadSessionList(); renderChips(); renderWorkspace();
+loadModels(); loadRepoTree(); loadTenants(); loadSessionList(); renderChips(); renderWorkspace();
 setInterval(loadSessionList, 5000);
 </script>
 </body>

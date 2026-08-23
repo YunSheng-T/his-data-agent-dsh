@@ -44,7 +44,7 @@ console.log(`日志: ${path.basename(path.dirname(newest.f))} · 场景: ${scena
 
 if (scenario === 'approve') {
   check('PTC 模式：顶层调用只有 run_code', topCalls.length > 0 && topCalls.every((n) => n === 'run_code'))
-  check('修改链路复用同一编排（lint/dryrun/commit/publish）', ['etl_patch', 'code_lint', 'test_dryrun', 'git_commit', 'sched_publish'].every((n) => subNames.includes(n)))
+  check('修改链路复用同一编排（lint/dryrun/commit/publish）', ['etl_patch', 'code_lint', 'test_dryrun', 'repo_commit', 'sched_publish'].every((n) => subNames.includes(n)))
   check('影响分析调用 lineage_downstream', subNames.includes('lineage_downstream'))
   const linSeq = seqOf((e) => e.type === 'tool/code-dispatch' && e.data.name === 'lineage_downstream')
   const patchSeq = seqOf((e) => e.type === 'tool/code-dispatch' && e.data.name === 'etl_patch')
@@ -52,16 +52,16 @@ if (scenario === 'approve') {
   check('未调用 dag_gen（修改链路不重生成调度）', !subNames.includes('dag_gen'))
 
   const askedNames = asked.map((e) => e.data.toolName)
-  check('审批点恰好 2 次（commit + 上线）', JSON.stringify(askedNames) === JSON.stringify(['git_commit', 'sched_publish']), askedNames.join(','))
+  check('审批点恰好 2 次（commit + 上线）', JSON.stringify(askedNames) === JSON.stringify(['repo_commit', 'sched_publish']), askedNames.join(','))
   check('两次审批均 allowed-once 落日志', decided.filter((e) => e.data.outcome === 'allowed-once').length >= 2)
 
   const drySeq = seqOf((e) => e.type === 'tool/code-dispatch' && e.data.name === 'test_dryrun')
-  const commitAskSeq = seqOf((e) => e.type === 'approval/asked' && e.data.toolName === 'git_commit')
+  const commitAskSeq = seqOf((e) => e.type === 'approval/asked' && e.data.toolName === 'repo_commit')
   check('dry-run 先于 commit 审批（编排不变量）', drySeq > 0 && commitAskSeq > 0 && drySeq < commitAskSeq, `dry=${drySeq} < commitAsk=${commitAskSeq}`)
 
   check('分支信息可从日志识别', !!branch, branch ?? '')
   // diff 断言以「本次旅程的提交」为准（分支可能从 feature 基线开出，main...branch 会含历史产物）
-  const commitSub = subs.find((e) => e.data.name === 'git_commit')
+  const commitSub = subs.find((e) => e.data.name === 'repo_commit')
   const commitText = (commitSub?.data.content ?? []).map((c) => c.text ?? '').join('')
   const commitId = commitText.match(/[0-9a-f]{7,40}/)?.[0]
   check('提交 ID 可从日志识别', !!commitId, commitId ?? commitText.slice(0, 80))
@@ -74,12 +74,12 @@ if (scenario === 'approve') {
   const pubText = (pubSub?.data.content ?? []).map((c) => c.text ?? '').join('')
   check('上线成功（status online）', pubText.includes('"online"'))
 } else if (scenario === 'reject-commit') {
-  // reject-commit：HIS_REJECT_TOOL=git_commit 的打回路径
-  const commitAsk = asked.find((e) => e.data.toolName === 'git_commit')
-  check('git_commit 触发审批点', !!commitAsk)
+  // reject-commit：HIS_REJECT_TOOL=repo_commit 的打回路径
+  const commitAsk = asked.find((e) => e.data.toolName === 'repo_commit')
+  check('repo_commit 触发审批点', !!commitAsk)
   const commitDecide = decided.find((e) => e.data.id === commitAsk?.data.id)
   check('审批结果 rejected 落日志', commitDecide?.data.outcome === 'rejected', commitDecide?.data.outcome ?? '')
-  const commitSub = subs.find((e) => e.data.name === 'git_commit')
+  const commitSub = subs.find((e) => e.data.name === 'repo_commit')
   check('打回后提交未发生（isError）', commitSub?.data.isError === true)
   const pubSub = subs.find((e) => e.data.name === 'sched_publish')
   const pubText = (pubSub?.data.content ?? []).map((c) => c.text ?? '').join('')
@@ -100,7 +100,7 @@ if (scenario === 'approve') {
   check('sched_publish 被调用且返回结构化拦截（blocked:true）', !!pubSub && /"blocked":\s*true/.test(pubText) && /"published":\s*false/.test(pubText))
   check('拦截原因为 lint error 级（sql.partition）', pubText.includes('lint 存在 error') && pubText.includes('sql.partition'))
   check('无 online 结果（作业未上线）', !pubText.includes('"online"'))
-  check('git_commit 审批点未出现（无可提交物，编排终止）', !asked.some((e) => e.data.toolName === 'git_commit'))
+  check('repo_commit 审批点未出现（无可提交物，编排终止）', !asked.some((e) => e.data.toolName === 'repo_commit'))
   check('仓实况：危险分支与工作区未被旅程破坏', git('status', '--porcelain') !== null)
 }
 

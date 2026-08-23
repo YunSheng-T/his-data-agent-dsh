@@ -34,14 +34,14 @@ const checks = []
 const check = (label, ok, extra = '') => { checks.push(ok); console.log(`${ok ? 'PASS' : 'FAIL'} ${label}${extra ? ' — ' + extra : ''}`) }
 
 check('PTC 模式：顶层调用只有 run_code', topCalls.length > 0 && topCalls.every((n) => n === 'run_code'), topCalls.join(','))
-check('子调度覆盖旅程全链', ['etl_codegen', 'code_lint', 'test_dryrun', 'dag_gen', 'git_commit', 'sched_publish', 'asset_sync'].every((n) => subNames.includes(n)))
+check('子调度覆盖旅程全链', ['etl_codegen', 'code_lint', 'test_dryrun', 'dag_gen', 'repo_commit', 'sched_publish', 'asset_sync'].every((n) => subNames.includes(n)))
 
-check('审批点恰好 2 次（commit + 上线）', JSON.stringify(askedNames) === JSON.stringify(['git_commit', 'sched_publish']), askedNames.join(','))
+check('审批点恰好 2 次（commit + 上线）', JSON.stringify(askedNames) === JSON.stringify(['repo_commit', 'sched_publish']), askedNames.join(','))
 const decided = events.filter((e) => e.type === 'approval/decided')
 check('两次审批均 allowed-once 落日志', decided.filter((e) => e.data.outcome === 'allowed-once').length >= 2)
 
 const drySeq = seqOf((e) => e.type === 'tool/code-dispatch' && e.data.name === 'test_dryrun')
-const commitAskSeq = seqOf((e) => e.type === 'approval/asked' && e.data.toolName === 'git_commit')
+const commitAskSeq = seqOf((e) => e.type === 'approval/asked' && e.data.toolName === 'repo_commit')
 check('dry-run 先于 commit 审批（编排不变量）', drySeq > 0 && commitAskSeq > 0 && drySeq < commitAskSeq, `dry=${drySeq} < commitAsk=${commitAskSeq}`)
 
 const etlSub = subs.find((e) => e.data.name === 'etl_codegen')
@@ -56,7 +56,7 @@ const asSub = subs.find((e) => e.data.name === 'asset_sync')
 const asText = (asSub?.data.content ?? []).map((c) => c.text ?? '').join('')
 check('血缘回写落日志（jobRefsOnModel）', asText.includes('jobRefsOnModel'), asText.slice(0, 120))
 
-check('gated 子调度零报错', ['git_commit', 'sched_publish', 'asset_sync'].every((n) => subs.find((e) => e.data.name === n)?.data.isError === false))
+check('gated 子调度零报错', ['repo_commit', 'sched_publish', 'asset_sync'].every((n) => subs.find((e) => e.data.name === n)?.data.isError === false))
 
 const pass = checks.filter(Boolean).length
 console.log(`\n== dev-journey(新建链路): ${pass}/${checks.length} 通过 ==`)

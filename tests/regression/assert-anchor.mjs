@@ -6,19 +6,27 @@ import { execFileSync } from 'node:child_process'
 
 const home = process.env.DSH_HOME || path.join(process.cwd(), 'dsh-home')
 
-let newest = null
+let candidates = []
 const walk = (d) => {
   for (const e of fs.readdirSync(d, { withFileTypes: true })) {
     const p = path.join(d, e.name)
     if (e.isDirectory()) walk(p)
-    else if (e.name === 'session.jsonl.zstd' && (!newest || fs.statSync(p).mtimeMs > newest.mtime)) newest = { f: p, mtime: fs.statSync(p).mtimeMs }
+    else if (e.name === 'session.jsonl.zstd') candidates.push({ f: p, mtime: fs.statSync(p).mtimeMs })
   }
 }
 walk(path.join(home, 'sessions'))
-if (!newest) { console.error('FAIL: 找不到会话日志'); process.exit(1) }
-
-const raw = execFileSync('zstd', ['-d', '-c', newest.f], { maxBuffer: 64 * 1024 * 1024 }).toString('utf8')
-const events = raw.trim().split('\n').filter(Boolean).map((l) => JSON.parse(l))
+// 取「最新且含 workspace_anchor 调用」的会话（纯建模会话没有锚定切换，直接当最新会误判）
+candidates = candidates.sort((a, b) => b.mtime - a.mtime)
+const load = (f) => execFileSync('zstd', ['-d', '-c', f], { maxBuffer: 64 * 1024 * 1024 }).toString('utf8')
+  .trim().split('\n').filter(Boolean).map((l) => JSON.parse(l))
+const found = candidates.map((c) => ({ ...c, events: load(c.f) }))
+  .find((c) => c.events.some((e) => {
+    // 选「最新且含分支级锚定（branch+dir）」的会话：纯模型锚定会话覆盖不了三级定位断言
+    if (e.type !== 'tool/call' || e.data.name !== 'workspace_anchor') return false
+    try { const a = JSON.parse(e.data.arguments ?? '{}'); return a.branch && a.dir } catch { return false }
+  }))
+if (!found) { console.error('FAIL: 找不到含锚定调用的会话日志'); process.exit(1) }
+const events = found.events
 
 const anchorCalls = events.filter((e) => e.type === 'tool/call' && e.data.name === 'workspace_anchor')
 const notices = events.filter((e) => e.type === 'user/message' && e.data?.source?.form === 'notice' && e.data?.source?.plugin === 'his-workspace-anchor')

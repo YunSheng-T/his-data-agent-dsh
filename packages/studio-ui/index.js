@@ -19,7 +19,7 @@ import { SessionId } from '@deepseek-ai/dsh-session'
 import { fileURLToPath } from 'node:url'
 
 export const name = 'his-studio-ui'
-export const inject = ['tools', 'agents', 'sessions', 'agentDefaultModel', 'hisModeling', 'hisRepo', 'hisDevAst', 'hisDryrun']
+export const inject = ['tools', 'agents', 'sessions', 'agentDefaultModel', 'hisModeling', 'hisRepo', 'hisDevAst', 'hisDryrun', 'hisCicd']
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const PORT = Number(process.env.HIS_STUDIO_PORT ?? 7300)
@@ -100,6 +100,34 @@ async function route(ctx, req, res, url) {
     res.end(fs.readFileSync(path.join(__dirname, 'public/index.html')))
     return
   }
+  // 静态资源（vendor：X6 等本地引入，不依赖 CDN）
+  const staticMatch = url.pathname.match(/^\/(vendor\/[\w.@/-]+)$/)
+  if (staticMatch) {
+    const f = path.join(__dirname, 'public', staticMatch[1])
+    if (!fs.existsSync(f)) return json(res, 404, { error: 'not found' })
+    res.writeHead(200, { 'content-type': f.endsWith('.js') ? 'text/javascript; charset=utf-8' : 'application/octet-stream' })
+    res.end(fs.readFileSync(f))
+    return
+  }
+
+  // 租户服务（V11）：列表 / 切换（切换的全链路跟随由前端驱动，隔离守卫在 Provider 层硬执行）
+  if (url.pathname === '/api/tenants') {
+    return json(res, 200, { tenants: ctx.hisRepo.tenants(), current: ctx.hisRepo.currentTenant() })
+  }
+  if (url.pathname === '/api/repo/tenant' && req.method === 'POST') {
+    const body = JSON.parse(await readBody(req))
+    try {
+      const t = ctx.hisRepo.switchTenant(body.tenant)
+      return json(res, 200, {
+        current: t,
+        tenants: ctx.hisRepo.tenants(),
+        branches: ctx.hisRepo.branches(),
+        branch: ctx.hisRepo.currentBranch(),
+        tree: ctx.hisRepo.treeWithState(ctx.hisRepo.currentBranch()),
+        packages: ctx.hisRepo.packages(),
+      })
+    } catch (e) { return json(res, 400, { error: e.message }) }
+  }
 
   // 工作区文件服务
   if (url.pathname === '/api/models') {
@@ -150,7 +178,22 @@ async function route(ctx, req, res, url) {
         }
       }
     }
-    return json(res, 200, { branches: ctx.hisRepo.branches(), current, tree })
+    // V10：分包归属徽标 + 文件行扫描状态点（CICD 权威报告摘要；未提交/工作区已改的不显示）
+    const dirtySet = new Set(branch === current ? ctx.hisRepo.status().map((s) => s.path) : [])
+    for (const ent of tree) {
+      const pkg = ctx.hisRepo.packageOf(ent.path)
+      if (pkg) ent.pkg = { platform: pkg.platform, connected: pkg.connected }
+      if (branch === current && ent.kind === 'etl' && !ent.uncommitted && !dirtySet.has(ent.path)) {
+        const v = ctx.hisCicd.verdictFor(ent.path, branch)
+        if (v) ent.scan = v
+      }
+    }
+    return json(res, 200, {
+      branches: ctx.hisRepo.branches(), current, tree,
+      tenant: ctx.hisRepo.currentTenant(),
+      packages: ctx.hisRepo.packages(),
+      address: ctx.hisRepo.address(),
+    })
   }
   if (url.pathname === '/api/repo/checkout' && req.method === 'POST') {
     const body = JSON.parse(await readBody(req))

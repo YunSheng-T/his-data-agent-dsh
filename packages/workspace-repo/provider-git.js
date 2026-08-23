@@ -40,7 +40,7 @@ export class GitRepoProvider {
       fs.writeFileSync(abs, content)
     }
     this.git('add', '-A')
-    this.git('commit', '-qm', message)
+    this.git('commit', '--allow-empty', '-qm', message) // 空种子（空租户占位仓）也允许
     return this
   }
 

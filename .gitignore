@@ -4,8 +4,8 @@ node_modules/
 
 # 运行时产物（可再生成）
 
-# 种子仓：packages/workspace-repo/seed-repo.js 首次启动自动重建
-runtime/repo-etl/
+# 多租户种子仓：packages/workspace-repo/seed-repo.js 首次启动自动重建
+runtime/
 
 # 会话日志（含对话内容，不入库）
 dsh-home/sessions/

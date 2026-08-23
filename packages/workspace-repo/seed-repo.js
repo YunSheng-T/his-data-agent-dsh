@@ -67,3 +67,17 @@ alert:
 timeout: 900
 `,
 }
+
+/** V10 平台化补种：未接入平台分包（etl_legacy/）只读演示——照常可见，但不可锚定不可写 */
+export const SEED_EXTRAS = {
+  'etl_legacy/ods/legacy_tax_sync.etl': `-- @job: legacy_tax_sync
+-- @engine: hive-sql
+-- @source: 老核心.tax_sync_buf
+-- @target: ods.legacy_tax_sync_di
+-- 【遗留 ETL 平台作业 · 未接入 Agent 工作范围 · 仅只读浏览】
+INSERT OVERWRITE TABLE ods.legacy_tax_sync_di PARTITION(dt='\${bizdate}')
+SELECT sync_id, taxpayer_no, sync_status, sync_time
+FROM 老核心.tax_sync_buf
+WHERE dt = '\${bizdate}';
+`,
+}

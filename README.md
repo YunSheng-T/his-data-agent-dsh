@@ -107,6 +107,13 @@ node tests/regression/e2e-studio.mjs       # 表层端到端（需 studio 已在
 
 - [x] P2-1 反向联动 · 模型变更 → ETL 过期提醒（`assert-impact.mjs` unit 10/10 + log 4/4 + studio 实证）：`parseEtl` 解析 @model 埋点（modelFile/modelVersion）；`lineage.jobsForModel` 反查（注解优先、targetTable 尾名兜底）；新 read 工具 `impact_check`（stale 三态：true/false/null 未知不误报）；repo 锚定注入 ⚠ 过期提醒（落 Session Log）；studio 目录树「模型已更新」徽标 + 版本胶囊；无埋点手写作业标 null 引导人工确认
 
+### P3 · 界面迭代 V10–V12（提示词 04：租户制代码仓 + 扫描体系 + X6 ER 图）
+
+- [x] P3-1 基建（`assert-platform.mjs` 22/22）：租户层 `TenantRepoProvider` 门面（finance→finance-dw 全量 / risk→risk-mart 空仓；四级地址 `tenant://{tenant}/{repo}@{branch}/{path}`；单仓自动迁移多租户布局）；分包注册表（etl→主力 ETL 平台 / dag→调度平台 / etl_legacy→未接入只读演示）+ 守卫在 Provider 层硬执行（非数据租户新建、未接入分包写入一律抛错）；**`git_add`/`git_commit` 合并更名为 `repo_commit`**（暂存+提交一体，提交即自动触发 CICD 流水线）；新增 `LocalCicdProvider`（mock 适配器，流水线号 4821 起、规则集 v1.2）+ 只读工具 `cicd_scan_report`（三类扫描：设计质量=lint / SQL=分区+危险模式 / 一致性=模型绑定↔代码引用实时比对，差异可修复复扫清零）；启动补登首条流水线让扫描点有权威来源
+- [x] P3-2 界面 V10/V11：顶栏租户下拉（切换全链路跟随：面包屑/仓树/工作区/快捷指令）；空租户占位视图 + 「切回 finance 租户继续」引导 chip；左栏仓树按分包分组 + 归属徽标 + etl_legacy 半透只读（点击 toast 提示不锚定）；文件行扫描状态点（✓ PASS / ⚠差异；未提交不显示）；「扫描这个作业」chip 直达 Agent 扫描流程；工作区头部挂 `tenant://` 全地址
+- [x] P3-3 ER 图换 AntV X6（vendor 本地引入不依赖 CDN）：`Shape.HTML` 注册 er-table 节点（表头+字段行，内容全部实时取自模型服务）；manhattan 路由 + rounded 连接 + 1:n 边标签；**属性行真 DOM 事件委托**：点行锚定「模型 · 字段」粒度并行高亮、点实体头锚定整模型、未绑行内「＋ 补全标准」一键直达 bindfield 流程；`graph.dispose()` + shape 单次注册纪律
+- [x] 配套：AGENTS.md 增补开发空间约定（repo_commit/cicd_scan_report/只读分包/租户守卫）；assert-anchor 修「最新会话」取样脆弱性（改取最新含分支锚定的会话）
+
 ### 采坑记录（本轮新增）
 
 - Cordis 注册自定义服务用 `ctx.provide(name, value)`，直接赋值报 `cannot set property without provide`；
@@ -131,3 +138,17 @@ node tests/regression/e2e-studio.mjs       # 表层端到端（需 studio 已在
 - 心跳**不要做成会话流里的占位行**：每秒刷新 + `scrollIntoView` 会劫持滚动、占位还会插到迟到的用户消息上面。正解是输入区上方的固定状态条（`.a-busybar`）+ 智能滚动（append 前判 nearBottom，用户在底部才跟随）；
 - Agent 回复是 Markdown（标题/表格/加粗/代码块），`textContent` 直出没法看——前端内置了 ~60 行轻量 mdToHtml（代码块/表格/标题/列表/加粗/行内代码），agent 消息走渲染、user/anchor 保持纯文本；
 - **Agent「光说不做」用 AGENTS.md 调**：dsh-base 自带 `dsh-agent-instructions`，自动加载会话工作区根目录的 `AGENTS.md` 进基线上下文。写入「动手优先」约定（创建类需求默认直接调工具建草稿、审批兜底、回复 ≤5 行），比改系统提示词插件干净。新会话生效。
+
+### 采坑记录（P3 平台化 V10–V12）
+
+- **工具改名要三处同步**：Definition 本体、断言脚本里按名取样的地方、AGENTS.md 约定文案——漏一处就是「断言全绿但模型找不到工具」；
+- `buildDevTools` 新增依赖（hisCicd）用**可选解构 + 执行期兜底报错**，老的多个构造点（测试/旅程/两条 profile）零改动；
+- 「最新会话」类断言不能盲取 mtime 最新——旅程/调试会污染。按内容特征取样（如「最新含分支锚定的会话」）；
+- 守卫（租户/分包只读）写在 **Provider 层硬执行**，UI 层的 toast/半透明只是体验层，防君子不防 Agent；
+- studio 后端重启：`lsof -ti :7300 | xargs kill -9`，`pkill -f` 匹配不到（启动命令行不含可匹配模式）；
+- 单仓 → 多租户布局用 `renameSync` 原地迁移 + 幂等补种，演示分支/历史全部保留，不要重建；
+- **X6 `Shape.HTML.register` 是全局一次性**：重复注册直接抛错，前端加 `window._erShapeReg` 守卫；重渲染前必须 `graph.dispose()` 先销再建，否则事件委托翻倍；
+- X6 边配置用对象形态（`midSide` anchor / manhattan 路由 / `targetMarker:null`），字符串简写在 2.18.1 下行为不一致；
+- X6 vendor 锁版本 2.18.1 本地引入（`/vendor/x6.js`），不依赖 CDN——内网部署前提；
+- `.gitignore` 不支持行尾注释；已入索引的文件加进 gitignore 也不会被忽略，要 `git rm --cached`；
+- 一致性扫描的口径对齐：模型绑定写 `std/X vN`、代码写 `@std/X vN`，比对前 strip `@`，别让格式差造假差异。
