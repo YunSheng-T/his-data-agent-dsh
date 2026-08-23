@@ -30,6 +30,24 @@ his-data-agent/
     └── e2e-studio.mjs                # studio 表层端到端：chat→轮询→审批回写→落盘验证
 ```
 
+## 克隆重建（GitHub）
+
+仓库：`github.com/YunSheng-T/his-data-agent-dsh`（private）。会话日志、种子仓、node_modules 均不入库，克隆后按以下步骤重建：
+
+```bash
+git clone git@github.com:YunSheng-T/his-data-agent-dsh.git && cd his-data-agent-dsh
+
+# 1. 装依赖（插件以 pnpm link: 挂源码，两个 profile 都要装）
+cd dsh-home/profiles/his-data-agent && pnpm install
+cd ../his-studio && pnpm install && cd ../../../..
+
+# 2. 无需手工准备种子仓/会话目录：
+#    runtime/repo-etl 首次启动由 packages/workspace-repo/seed-repo.js 自动重建
+#    dsh-home/sessions 随会话自动产生（本地日志，不入库）
+
+# 3. 启动（同下方「运行」节；密钥走 DEEPSEEK_API_KEY 环境变量，问项目维护者要）
+```
+
 ## 运行
 
 ```bash
