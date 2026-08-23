@@ -13,6 +13,8 @@ const ok = (name, cond, extra = '') => {
 // 页面本身可达且含代码仓挂载点
 const html = await fetch(BASE + '/').then((r) => r.text())
 ok('工作台页面可达', html.includes('repo-view') && html.includes('repo-tree'))
+// ER 图布局防重叠：分层分列（多 dim 表曾同坐标 (30,24) 堆叠）+ 无交互模式必须自动适配视口
+ok('ER 图分层分列布局 + 自动适配视口', html.includes('COL_ORDER') && html.includes('zoomToFit'), '防多 dim 表同坐标重叠')
 
 // 树：分支清单 + 当前分支 + 条目带 kind
 const tree = await fetch(BASE + '/api/repo/tree').then(j)

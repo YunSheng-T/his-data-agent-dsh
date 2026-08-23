@@ -593,13 +593,20 @@ function renderErGraph() {
   const g = new X6.Graph({ container: el, background: { color: '#fbfaf6' }, interacting: false });
   const files = Object.keys(erDetails);
   const hOf = (f) => ER_HEAD + (erDetails[f].fields?.length ?? 0) * ER_ROW + 12;
-  // 布局：维表居左，事实表居右按实际高度堆叠
   const dims = Object.fromEntries(files.map((f) => [f, hOf(f)]));
+  // 布局：按分层分列（ods/dim → dwd → dws/ads 从左到右），列内按实际高度堆叠——
+  // 不能再按 dim_/非 dim_ 两列写死，多张建表或新层模型会同坐标重叠
+  const COL_ORDER = ['ods', 'dim', 'dwd', 'dws', 'ads'];
+  const cols = {};
+  for (const f of files) { const l = f.split('_')[0]; (cols[l] ??= []).push(f); }
   const pos = {};
-  let fy = 24;
-  for (const f of files) {
-    if (f.startsWith('dim_')) pos[f] = { x: 30, y: 24 };
-    else { pos[f] = { x: 430, y: fy }; fy += dims[f] + 64; }
+  let cx = 30;
+  for (const l of COL_ORDER) {
+    const col = cols[l];
+    if (!col) continue;
+    let cy = 24;
+    for (const f of col) { pos[f] = { x: cx, y: cy }; cy += dims[f] + 56; }
+    cx += ER_W + 160;
   }
   for (const file of files) {
     const d = erDetails[file];
@@ -617,6 +624,8 @@ function renderErGraph() {
   });
   if (has('dim_taxpayer.model') && has('dwd_tax_declaration.model')) mkEdge(nameOf('dim_taxpayer.model'), 'right', nameOf('dwd_tax_declaration.model'), 'left', '1 : n · taxpayer_id');
   if (has('dwd_tax_declaration.model') && has('dwd_tax_payment.model')) mkEdge(nameOf('dwd_tax_declaration.model'), 'bottom', nameOf('dwd_tax_payment.model'), 'top', '1 : n · decl_id');
+  // interacting:false 不能平移缩放，内容超出视口时必须自动适配，否则列多了看不到/看似重叠
+  g.zoomToFit({ padding: 24, maxScale: 1 });
   // 属性行事件委托（真 DOM 可挂事件）
   el.onclick = (ev) => {
     const add = ev.target.closest('[data-er-add]');
