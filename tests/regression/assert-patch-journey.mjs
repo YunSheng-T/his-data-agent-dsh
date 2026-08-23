@@ -4,10 +4,11 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 
 const scenario = process.argv[2] ?? 'approve'
 const home = process.env.DSH_HOME || path.join(process.cwd(), 'dsh-home')
-const repoDir = new URL('../../runtime/repos/finance-dw', import.meta.url).pathname // 相对脚本定位，与 cwd 无关
+const repoDir = fileURLToPath(new URL('../../runtime/repos/finance-dw', import.meta.url)) // 相对脚本定位，与 cwd 无关；fileURLToPath 保证 Windows 路径正确
 
 const candidates = []
 const walk = (d) => {
