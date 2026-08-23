@@ -10,6 +10,9 @@ import path from 'node:path'
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const env = { ...process.env }
 env.DSH_HOME ??= path.join(repoRoot, 'dsh-home')
+// 固定工作目录到仓库根：dsh-agent-instructions 按会话 cwd 解析 AGENTS.md，
+// 从别的目录启动会静默丢掉「动手优先」等工作约定
+process.chdir(repoRoot)
 
 const bin = path.join(repoRoot, 'node_modules', '.bin', process.platform === 'win32' ? 'dsh.cmd' : 'dsh')
 if (!existsSync(bin)) {

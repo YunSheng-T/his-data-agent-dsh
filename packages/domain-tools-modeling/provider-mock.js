@@ -53,7 +53,7 @@ export const provider = {
       if (f.pk) nf.pk = true
       if (f.std) {
         const known = state.stdLib.standards.some((s) => f.std.startsWith(s.code)) || state.stdLib.drafts.some((d) => f.std.startsWith(d.code))
-        if (!known) throw new Error(`标准 ${f.std} 不在标准库 ${state.stdLib.version} 或草案列表中（字段 ${nf.n}）`)
+        if (!known) throw new Error(`标准 ${f.std} 不在标准库 ${state.stdLib.version} 或草案列表中（字段 ${nf.n}）；下一步：先调 std_create_draft 创建该标准草案，再用草案编号重新绑定`)
         nf.std = f.std
       }
       return nf
@@ -147,7 +147,7 @@ export const provider = {
     if (!f) throw new Error(`字段不存在: ${model}.${field}`)
     if (f.skip) throw new Error(`字段 ${field} 为${f.skip}，不允许绑定`)
     const known = state.stdLib.standards.some((s) => std.startsWith(s.code)) || state.stdLib.drafts.some((d) => std.startsWith(d.code))
-    if (!known) throw new Error(`标准 ${std} 不在标准库 ${state.stdLib.version} 或草案列表中`)
+    if (!known) throw new Error(`标准 ${std} 不在标准库 ${state.stdLib.version} 或草案列表中；下一步：先调 std_create_draft 创建该标准草案，再用草案编号重新绑定`)
     f.std = std
     ws(model).binds.push({ field, std, ts: now() })
     const bound = m.fields.filter((x) => x.std).length
