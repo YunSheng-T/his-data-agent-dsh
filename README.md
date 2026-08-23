@@ -113,6 +113,7 @@ node tests/regression/e2e-studio.mjs       # 表层端到端（需 studio 已在
 - [x] P3-2 界面 V10/V11：顶栏租户下拉（切换全链路跟随：面包屑/仓树/工作区/快捷指令）；空租户占位视图 + 「切回 finance 租户继续」引导 chip；左栏仓树按分包分组 + 归属徽标 + etl_legacy 半透只读（点击 toast 提示不锚定）；文件行扫描状态点（✓ PASS / ⚠差异；未提交不显示）；「扫描这个作业」chip 直达 Agent 扫描流程；工作区头部挂 `tenant://` 全地址
 - [x] P3-3 ER 图换 AntV X6（vendor 本地引入不依赖 CDN）：`Shape.HTML` 注册 er-table 节点（表头+字段行，内容全部实时取自模型服务）；manhattan 路由 + rounded 连接 + 1:n 边标签；**属性行真 DOM 事件委托**：点行锚定「模型 · 字段」粒度并行高亮、点实体头锚定整模型、未绑行内「＋ 补全标准」一键直达 bindfield 流程；`graph.dispose()` + shape 单次注册纪律
 - [x] 配套：AGENTS.md 增补开发空间约定（repo_commit/cicd_scan_report/只读分包/租户守卫）；assert-anchor 修「最新会话」取样脆弱性（改取最新含分支锚定的会话）
+- [x] P3-4 新建模型能力（`assert-model-create.mjs` 19/19）：新增 `model_create`（workspace-write·gated）——分层前缀自动推断/补齐、非法分层与重名拒绝、分区字段 dt 自动追加免绑、字段一次带入可直绑标准（与 bindStd 同口径校验库内/草案）；`model_alter_field` 升级为 upsert（字段不存在即新增，自动插到 dt 前）；新建模型即刻出现在工作台模型目录（/api/models 读 Provider 实况），后续绑标准→提版本→DDL→发布→锚定全链已实证。配套修复：三个旅程断言的会话取样改结构化判定（见采坑）
 
 ### 采坑记录（本轮新增）
 
@@ -152,3 +153,5 @@ node tests/regression/e2e-studio.mjs       # 表层端到端（需 studio 已在
 - X6 vendor 锁版本 2.18.1 本地引入（`/vendor/x6.js`），不依赖 CDN——内网部署前提；
 - `.gitignore` 不支持行尾注释；已入索引的文件加进 gitignore 也不会被忽略，要 `git rm --cached`；
 - 一致性扫描的口径对齐：模型绑定写 `std/X vN`、代码写 `@std/X vN`，比对前 strip `@`，别让格式差造假差异。
+- 「最新会话」断言的二次踩坑：旅程断言按 raw 字符串匹配工具名仍会被**工具 schema 快照**误中（快照里就有 `"name":"repo_commit"`），必须逐行解析事件结构判 `tool/call`/`tool/code-dispatch` 的 `data.name`；用户在日常工作室聊天就会让 mtime 最新会话不再是旅程会话；
+- patch 旅程断言引用的仓路径要跟随多租户迁移（`runtime/repo-etl` → `runtime/repos/finance-dw`）。

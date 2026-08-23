@@ -1,10 +1,21 @@
-// Definition 层契约 —— 建模域 11 个工具的接口定义（接口 + JSON Schema + risk 标注）
+// Definition 层契约 —— 建模域 12 个工具的接口定义（接口 + JSON Schema + risk 标注）
 // 本层先定稿、保持稳定；Provider 层（provider-mock.js）是可替换的替身。
 // risk 词表：read | workspace-write | commit | publish | knowledge-write
 // （审批策略插件只认标注，未标注 fail-closed）
 
 const S = (type, extra = {}) => ({ type, ...extra })
 const MODEL_ARG = { model: S('string', { description: '模型文件名，如 dwd_tax_declaration.model' }) }
+const FIELD_ITEM = {
+  type: 'object',
+  properties: {
+    n: S('string', { description: '字段名（英文小写蛇形）' }),
+    t: S('string', { description: '类型，如 STRING / DECIMAL(14,2)' }),
+    c: S('string', { description: '字段中文说明' }),
+    std: S('string', { description: '可选：直接绑定标准，如 std/TAXPAYER_ID v2（须在标准库或草案中）' }),
+    pk: S('boolean', { description: '可选：是否业务主键' }),
+  },
+  required: ['n', 't', 'c'],
+}
 
 const jsonOut = {
   schema: { type: 'object' },
@@ -13,6 +24,24 @@ const jsonOut = {
 
 export function buildDefinitions(p) {
   return [
+    {
+      name: 'model_create',
+      risk: 'workspace-write',
+      description: '新建数据模型（写入·gated）：按分层命名惯例创建 .model，可一次性带字段；建完即为 v0.1 未发布态，后续走绑标准/提版本/发布流',
+      parameters: {
+        type: 'object',
+        properties: {
+          ...MODEL_ARG,
+          cn: S('string', { description: '模型中文名，如 数据字典 · 维表' }),
+          domain: S('string', { description: '所属域，默认 财税域' }),
+          layer: S('string', { description: '分层：ODS/DWD/DWS/ADS/DIM；缺省从文件名前缀推断' }),
+          fields: { type: 'array', items: FIELD_ITEM, description: '字段清单（可后补）；分区字段 dt 自动追加，无需传入' },
+        },
+        required: ['model', 'cn'],
+      },
+      output: jsonOut,
+      execute: (args) => p.createModel(args),
+    },
     {
       name: 'model_read_fields',
       risk: 'read',
@@ -78,7 +107,7 @@ export function buildDefinitions(p) {
     {
       name: 'model_alter_field',
       risk: 'workspace-write',
-      description: '修改字段类型或说明（工作区写入·未提交态）',
+      description: '修改字段类型或说明；字段不存在时视为新增字段（新增必须给 type）（工作区写入·未提交态）',
       parameters: {
         type: 'object',
         properties: { ...MODEL_ARG, field: S('string'), type: S('string', { description: '新类型' }), comment: S('string', { description: '新说明' }) },

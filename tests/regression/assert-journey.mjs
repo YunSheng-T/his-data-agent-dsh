@@ -8,18 +8,26 @@ import { execFileSync } from 'node:child_process'
 const scenario = process.argv[2] ?? 'approve'
 const home = process.env.DSH_HOME || path.join(process.cwd(), 'dsh-home')
 
-let newest = null
+const candidates = []
 const walk = (d) => {
   for (const e of fs.readdirSync(d, { withFileTypes: true })) {
     const p = path.join(d, e.name)
     if (e.isDirectory()) walk(p)
-    else if (e.name === 'session.jsonl.zstd' && (!newest || fs.statSync(p).mtimeMs > newest.mtime)) newest = { f: p, mtime: fs.statSync(p).mtimeMs }
+    else if (e.name === 'session.jsonl.zstd') candidates.push({ f: p, mtime: fs.statSync(p).mtimeMs })
   }
 }
 walk(path.join(home, 'sessions'))
-if (!newest) { console.error('FAIL: 找不到会话日志'); process.exit(1) }
+// 取「最新且真实调用过 asset_register」的会话：日常工作室对话没有建模审批旅程，
+// 且工具 schema 快照里也含工具名，必须解析事件结构判断（不能 raw 字符串匹配）
+const load = (f) => execFileSync('zstd', ['-d', '-c', f], { maxBuffer: 64 * 1024 * 1024 }).toString('utf8')
+const hasCall = (raw, name) => raw.trim().split('\n').filter(Boolean).some((l) => {
+  try { const e = JSON.parse(l); return (e.type === 'tool/call' || e.type === 'tool/code-dispatch') && e.data?.name === name } catch { return false }
+})
+const found = candidates.sort((a, b) => b.mtime - a.mtime).map((c) => ({ ...c, raw: load(c.f) }))
+  .find((c) => hasCall(c.raw, 'asset_register'))
+if (!found) { console.error('FAIL: 找不到含建模旅程的会话日志'); process.exit(1) }
 
-const raw = execFileSync('zstd', ['-d', '-c', newest.f], { maxBuffer: 64 * 1024 * 1024 }).toString('utf8')
+const raw = found.raw
 const events = raw.trim().split('\n').filter(Boolean).map((l) => JSON.parse(l))
 
 const asked = events.filter((e) => e.type === 'approval/asked')
@@ -40,7 +48,7 @@ for (const e of events) {
 const DOMAIN = ['model_read_fields','model_lint','std_ref_scan','std_search','std_create_draft','model_bind_std','model_alter_field','model_commit','ddl_gen','asset_register','lineage_attach']
 const domainAsked = asked.filter((e) => DOMAIN.includes(e.data.toolName))
 
-console.log(`日志: ${path.basename(path.dirname(newest.f))} · 事件 ${events.length} 条 · 工具结果 ${results.length} 条 · 域审批点 ${domainAsked.length} 个`)
+console.log(`日志: ${path.basename(path.dirname(found.f))} · 事件 ${events.length} 条 · 工具结果 ${results.length} 条 · 域审批点 ${domainAsked.length} 个`)
 
 const checks = []
 const check = (label, ok, extra = '') => { checks.push(ok); console.log(`${ok ? 'PASS' : 'FAIL'} ${label}${extra ? ' — ' + extra : ''}`) }

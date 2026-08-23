@@ -30,6 +30,52 @@ function ws(file) {
 }
 
 export const provider = {
+  // ---------- 模型服务（新建，gated） ----------
+  createModel({ model, cn, domain, layer, fields }) {
+    let file = String(model ?? '').trim()
+    if (!file) throw new Error('缺少模型文件名')
+    if (!file.endsWith('.model')) file += '.model'
+    let name = file.slice(0, -'.model'.length)
+    // 分层：显式传参优先，否则从文件名前缀推断；两者都没有则拒绝（防乱命名）
+    const LAYERS = ['ODS', 'DWD', 'DWS', 'ADS', 'DIM']
+    let lyr = (layer ?? '').toUpperCase()
+    if (lyr && !LAYERS.includes(lyr)) throw new Error(`非法分层 ${lyr}（可选：${LAYERS.join('/')}）`)
+    if (!lyr) lyr = LAYERS.find((l) => name.startsWith(l.toLowerCase() + '_')) ?? ''
+    if (!lyr) throw new Error(`无法识别分层：文件名须以 ${LAYERS.map((l) => l.toLowerCase() + '_').join('/')} 前缀开头，或显式传 layer`)
+    // 显式 layer 与文件名前缀不一致 → 按分层自动补齐前缀
+    const prefix = lyr.toLowerCase() + '_'
+    if (!name.startsWith(prefix)) { name = prefix + name; file = `${name}.model` }
+    if (state.models[file]) throw new Error(`模型已存在: ${file}（改名或先 model_read_fields 查看现有模型）`)
+    // 字段归一化 + 标准引用校验（与 bindStd 同一口径）
+    const normFields = (fields ?? []).map((f) => {
+      if (!f?.n || !f?.t) throw new Error(`字段缺 n/t: ${JSON.stringify(f)}`)
+      const nf = { n: String(f.n), t: String(f.t).toUpperCase(), c: f.c ?? '', std: null }
+      if (f.pk) nf.pk = true
+      if (f.std) {
+        const known = state.stdLib.standards.some((s) => f.std.startsWith(s.code)) || state.stdLib.drafts.some((d) => f.std.startsWith(d.code))
+        if (!known) throw new Error(`标准 ${f.std} 不在标准库 ${state.stdLib.version} 或草案列表中（字段 ${nf.n}）`)
+        nf.std = f.std
+      }
+      return nf
+    })
+    // 分区字段自动追加（口径与 genDdl 一致）
+    if (!normFields.some((f) => f.n === 'dt')) normFields.push({ n: 'dt', t: 'STRING', c: '月分区 yyyyMM', std: null, skip: '分区字段 · 免绑' })
+    const m = {
+      file, name, cn: cn ?? '', domain: domain ?? '财税域', layer: lyr,
+      version: 'v0.1', published: false,
+      fields: normFields,
+      versions: [{ v: 'v0.1', n: '新建模型（Agent）', t: now().slice(5, 10) }],
+    }
+    state.models[file] = m
+    const bound = normFields.filter((f) => f.std).length
+    return {
+      model: name, file, cn: m.cn, domain: m.domain, layer: lyr, version: 'v0.1', published: false,
+      fieldCount: normFields.length, bindingRate: `${bound}/${normFields.length}`,
+      next: '后续：model_bind_std 绑标准 / model_alter_field 补字段 / model_commit 提版本 / ddl_gen 出 DDL',
+      evidence: evidence('model-service', 'v0.1'),
+    }
+  },
+
   // ---------- 模型管理服务（只读） ----------
   readFields(file) {
     const m = getModel(file)
@@ -111,9 +157,17 @@ export const provider = {
   alterField({ model, field, type, comment }) {
     const m = getModel(model)
     const f = m.fields.find((x) => x.n === field)
-    if (!f) throw new Error(`字段不存在: ${model}.${field}`)
+    // 字段不存在 → 视为「加字段」（新字段必须给类型）
+    if (!f) {
+      if (!type) throw new Error(`字段不存在: ${model}.${field}；加新字段必须给 type`)
+      const nf = { n: field, t: String(type).toUpperCase(), c: comment ?? '', std: null }
+      const dtIdx = m.fields.findIndex((x) => x.n === 'dt')
+      m.fields.splice(dtIdx === -1 ? m.fields.length : dtIdx, 0, nf) // 插到分区字段 dt 之前
+      ws(model).alters.push({ field, added: true, after: { t: nf.t, c: nf.c }, ts: now() })
+      return { model: m.name, field, added: true, after: { t: nf.t, c: nf.c }, uncommitted: true, evidence: evidence('model-service-workspace', m.version) }
+    }
     const before = { t: f.t, c: f.c }
-    if (type) f.t = type
+    if (type) f.t = String(type).toUpperCase()
     if (comment) f.c = comment
     ws(model).alters.push({ field, before, after: { t: f.t, c: f.c }, ts: now() })
     return { model: m.name, field, before, after: { t: f.t, c: f.c }, uncommitted: true, evidence: evidence('model-service-workspace', m.version) }
