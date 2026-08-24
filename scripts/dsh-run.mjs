@@ -19,10 +19,22 @@ if (!existsSync(bin)) {
   console.error('未找到 dsh 可执行文件。请先在仓库根目录执行：pnpm run setup')
   process.exit(1)
 }
-if (!env.DEEPSEEK_API_KEY) {
-  console.error('未设置 DEEPSEEK_API_KEY 环境变量（密钥只走环境变量，不落文件）。')
-  console.error('  bash:       export DEEPSEEK_API_KEY=sk-xxx')
-  console.error('  PowerShell: $env:DEEPSEEK_API_KEY = "sk-xxx"')
+// 按 profile 校验凭据：内网网关 profile（his-agent-internal）走 INTERNAL_LLM_API_KEY，
+// 其余 profile 的默认模型是 DeepSeek 路由，需要 DEEPSEEK_API_KEY
+const pIdx = process.argv.indexOf('--profile')
+const profile = pIdx >= 0 ? process.argv[pIdx + 1] : null
+const isInternal = profile === 'his-agent-internal'
+const needKey = isInternal ? 'INTERNAL_LLM_API_KEY' : 'DEEPSEEK_API_KEY'
+if (!env[needKey]) {
+  console.error(`未设置 ${needKey} 环境变量（密钥只走环境变量，不落文件）。`)
+  if (isInternal) {
+    console.error('  bash:       export INTERNAL_LLM_API_KEY=xxx')
+    console.error('  PowerShell: $env:INTERNAL_LLM_API_KEY = "xxx"')
+    console.error('  并确认 dsh-home/profiles/his-agent-internal/cordis.patch.yml 里 llm-pi-ai 的 baseURL 已改成内网网关地址')
+  } else {
+    console.error('  bash:       export DEEPSEEK_API_KEY=sk-xxx')
+    console.error('  PowerShell: $env:DEEPSEEK_API_KEY = "sk-xxx"')
+  }
   process.exit(1)
 }
 

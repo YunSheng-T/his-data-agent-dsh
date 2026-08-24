@@ -90,6 +90,30 @@ node tests/regression/e2e-studio.mjs
 
 > 若想绕开启动器直接调 dsh：bash 用 `node_modules/.bin/dsh`，PowerShell 用 `node_modules\.bin\dsh.cmd`，并自行设置 `DSH_HOME` 指向 `dsh-home`。
 
+## 内网运行（his-agent-internal · OpenAI 兼容网关）
+
+模型路由切到内网 LLM 网关（llm-pi-ai 桥，OpenAI 兼容协议），其余能力与外网 profile 完全一致：
+
+```bash
+# 0. 拉最新代码后必须补装依赖（link: 依赖变化不会自动同步，ops 等插件缺失就是没跑这步）
+pnpm run setup
+
+# 1. 改网关地址（一次性）：dsh-home/profiles/his-agent-internal/cordis.patch.yml
+#    llm-pi-ai → providers.internal-openai.baseURL 改成你们网关地址；models[0].id 改成网关真实模型 id
+
+# 2. 设内网网关凭据（不是 DEEPSEEK_API_KEY——启动器按 profile 校验对应 key）
+export INTERNAL_LLM_API_KEY=xxx        # PowerShell: $env:INTERNAL_LLM_API_KEY = "xxx"
+
+# 3. 启动 headless Agent
+pnpm run agent:internal -- "你的任务指令"
+```
+
+排错要点：
+
+- **启动报「未设置 DEEPSEEK_API_KEY」** → 你跑的是外网 profile（`pnpm run agent`）；内网用 `pnpm run agent:internal`，校验的是 `INTERNAL_LLM_API_KEY`。
+- **ops_* 工具不存在 / 日志无 `[domain-tools-ops] registered`** → profile 依赖没装或代码不是最新：`git pull` 后重跑 `pnpm run setup`，启动日志应看到 `domain-tools-ops registered: ops_screen…ops_callback · 作业目录 8 个`。
+- 内网无 zstd 时旅程类断言跑不了（纯静态断言不受影响），见「前置依赖」节。
+
 ## 关键约定
 
 - **risk 标注是自有约定**（挂在 ToolDefinition 对象上），审批插件只认标注不认工具名；未标注 fail-closed。
