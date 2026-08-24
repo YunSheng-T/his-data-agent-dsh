@@ -1,0 +1,86 @@
+# his-agent-internal patch 层（M2 穿刺：OpenAI 格式内网网关路由）
+# 与 his-data-agent 的唯一差异：默认模型指向 internal-openai 路由（OpenAI 兼容协议）。
+# 正式接入只需两步：把 baseURL 换成内网网关地址 + 设置 INTERNAL_LLM_API_KEY 环境变量。
+
+# M2: OpenAI 兼容的内网模型网关路由（pi-ai 桥，dsh-base 已内置该插件）
+- id: llm-pi-ai
+  config:
+    providers:
+      internal-openai:
+        displayName: 内网模型网关（OpenAI 兼容）
+        api: openai-completions
+        baseURL: http://127.0.0.1:8300/v1   # ← 换成你们内网网关地址（仅此一行）
+        apiKeyEnv: INTERNAL_LLM_API_KEY      # 凭据引用：只记环境变量名，密钥不落文件
+        models:
+          - id: internal-chat              # ← 换成网关上的真实模型 id
+            contextWindow: 131072
+
+# M2: 本 profile 默认模型切到内网路由
+- id: agent-default-model
+  config:
+    provider: internal-openai
+    model: internal-chat
+
+- id: tool-bash
+  disabled: true
+- id: tool-pwsh
+  disabled: true
+- id: tool-fs
+  disabled: true
+- id: tool-fs-search
+  disabled: true
+- id: tool-str-replace-editor
+  disabled: true
+- id: tool-web
+  disabled: true
+- id: session-telemetry-otel
+  disabled: true
+
+# P0 边界：不做子 Agent / 后台任务，全部摘除（V9 设计定稿，P0-9 试运行后补齐）
+- id: subagent
+  disabled: true
+- id: subagent-spawn-in-process
+  disabled: true
+- id: subagent-fork-in-process
+  disabled: true
+- id: tool-subagent-control
+  disabled: true
+- id: tool-subagent-list-agents
+  disabled: true
+- id: tool-subagent
+  disabled: true
+- id: tool-subagent-fork
+  disabled: true
+- id: tool-subagent-report
+  disabled: true
+- id: tool-jobs
+  disabled: true
+# 级联依赖：subagents 服务摘除后这三个注入它，必须一并禁用
+- id: workflow-worker-thread
+  disabled: true
+- id: tool-workflow
+  disabled: true
+- id: tool-ralph
+  disabled: true
+
+- insert:
+    - id: his-approval-policy
+      name: '@his/approval-policy'
+      config:
+        riskOverrides:
+          todo_write: read
+          exit_plan_mode: read
+          create_goal: read
+          get_goal: read
+          update_goal: read
+          run_code: read
+    - id: his-approval-answerer
+      name: '@his/approval-policy/answerer'
+    - id: his-domain-tools-modeling
+      name: '@his/domain-tools-modeling'
+    - id: his-workspace-anchor
+      name: '@his/workspace-anchor'
+    - id: his-workspace-repo
+      name: '@his/workspace-repo'
+    - id: his-domain-tools-dev
+      name: '@his/domain-tools-dev'
