@@ -34,9 +34,13 @@ function scanForbidden(exec) {
 }
 
 // 从参数里提炼方案摘要（审批请求不携带参数，摘要只能编码进 reason —— M0 穿刺结论 2）
+// 约定：工具参数带 approvalNote（string）时优先采用——由模型用业务语言写清「在确认什么」，
+// 否则回退到参数截断摘要（60 字符截断对企业用户不友好，如作业清单）
 function summarize(exec) {
   const args = exec.arguments ?? {}
+  if (typeof args.approvalNote === 'string' && args.approvalNote.trim()) return args.approvalNote.trim()
   const parts = Object.entries(args)
+    .filter(([k]) => k !== 'approvalNote')
     .slice(0, 4)
     .map(([k, v]) => `${k}=${String(typeof v === 'object' ? JSON.stringify(v) : v).slice(0, 60)}`)
   return parts.join(', ')

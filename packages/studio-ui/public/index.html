@@ -1113,7 +1113,7 @@ function renderChips() {
     } else if (active.kind === 'repo') chips = [{ label: '这个调度的上下游是什么' }, { label: '上线这个调度作业' }];
     else chips = [
       { label: '新建 dwd 层作业的 ETL 与调度' },
-      { label: '大促暂停/恢复编排', prompt: '大促前暂停财税域非核心离线作业：先用 ops_screen 筛出目标清单并回显口径（含自动排除项）等我确认——这是第一道门；确认后再用 ops_topo 按血缘排序、ops_gen 成对生成暂停/恢复 .ops（镜像、IF EXISTS、checkpoint 配对），自检三件套结论讲清楚后引导我确认执行序列（第二道门 repo_commit）与部署（第三道门 ops_deploy，绑定变更号、MANUAL 模式）。只产出 PAUSE/RESUME，DROP 类高危命令不进入本场景' },
+      { label: '大促暂停/恢复编排', prompt: '大促前暂停财税域非核心离线作业：用 ops_screen 筛出目标清单（含自动排除项），ops_topo 按血缘排序后，直接把清单口径写进 approvalNote 调 ops_gen——确认走审批卡，不要在对话里问我确认；自检三件套结论讲清楚后依次走 repo_commit（序列确认）与 ops_deploy（部署确认，变更号找我索取，MANUAL 模式）。只产出 PAUSE/RESUME，DROP 类高危命令不进入本场景' },
     ];
   } else {
     const fd = erSel?.fieldData;

@@ -3,7 +3,7 @@
 // 本驱动在 turn/end 后若旅程未走完（ops_callback 未出现）则自动回复「确认，继续」（最多 4 次）。
 // 用法：node tests/regression/e2e-ops.mjs（前置：his-studio 已在 :7300 运行）
 const BASE = 'http://localhost:7300'
-const TASK = process.argv[2] ?? '大促前批量暂停财税域非核心离线作业并完成部署：先筛清单回显口径，确认后血缘排序、成对生成暂停/恢复 .ops，自检后提交并部署，变更单号 CHG-20260824，执行模式 MANUAL。全程按三道门走。'
+const TASK = process.argv[2] ?? `大促前批量暂停财税域非核心离线作业并完成部署：ops_screen 筛清单、ops_topo 血缘排序后直接把口径写进 approvalNote 调 ops_gen（确认走审批卡，不要对话式问我），制品标题用「大促${new Date().toISOString().slice(5, 10)}专场」，自检后 repo_commit 提交、ops_deploy 部署，变更单号 CHG-20260824，执行模式 MANUAL。`
 
 const j = (r) => r.json()
 const post = (p, body) => fetch(BASE + p, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).then(j)

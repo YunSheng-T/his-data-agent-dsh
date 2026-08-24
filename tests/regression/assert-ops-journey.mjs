@@ -50,6 +50,16 @@ check('工具审批恰好 3 次且顺序为 ops_gen → repo_commit → ops_depl
   JSON.stringify(askedNames) === JSON.stringify(['ops_gen', 'repo_commit', 'ops_deploy']), askedNames.join(','))
 check('三次审批均 allowed-once 落日志', decided.filter((e) => e.data.outcome === 'allowed-once').length === 3)
 
+// 审批卡质量（企业定制口径）：approvalNote 优先生效，卡片上是人话不是参数截断
+const genAsk = asked.find((e) => e.data.toolName === 'ops_gen')
+check('第一道门审批卡携带业务话术（approvalNote 生效，非参数截断）', !!genAsk?.data?.reason && !genAsk.data.reason.includes('jobs=['), (genAsk?.data?.reason ?? '').slice(0, 80))
+
+// 无对话式闸门：ops_screen 之后、第一道审批卡之前不应有 turn 中断（模型直接调 gated 工具）
+const seqOf = (pred) => events.find(pred)?.seq ?? -1
+const screenSeq = seqOf((e) => e.type === 'tool/call' && e.data.name === 'ops_screen')
+const turnEndBetween = events.some((e) => e.type === 'turn/end' && e.seq > screenSeq && e.seq < (genAsk?.seq ?? Infinity))
+check('第一道门直达审批卡（无对话式确认中断）', screenSeq > 0 && !!genAsk && !turnEndBetween, `screen@${screenSeq} → ask@${genAsk?.seq}`)
+
 // ---------- 链路完整性 ----------
 check('编排链路工具齐全（screen/topo/gen/check/commit/deploy/callback）',
   ['ops_screen', 'ops_topo', 'ops_gen', 'ops_check', 'repo_commit', 'ops_deploy', 'ops_callback'].every((n) => callNames.includes(n)))
@@ -64,7 +74,10 @@ const gen = resultOf('ops_gen')
 check('生成：配对 6/6 · 环无 · 高危无', gen?.check?.pairing?.pass === true && gen?.check?.cycle?.pass === true && gen?.check?.danger?.pass === true, gen?.check?.pairing?.note)
 check('豁免告警点名核心报表（依赖完整性）', (gen?.exemptions ?? gen?.check?.completeness?.warnings ?? []).some((w) => w.name === 'ads_tax_core_report'))
 const commit = resultOf('repo_commit')
-check('提交触发 CICD 且 .ops 被扫描', (commit?.pipeline?.scanned ?? []).some((f) => f.endsWith('.ops')), JSON.stringify(commit?.pipeline?.scanned))
+// 幂等重跑容忍：再生成内容与已提交一致时 git 无变更（无新流水线属正常）；有变更则 .ops 必须进扫描
+check('提交触发 CICD 且 .ops 被扫描（或冪等无变更）',
+  (commit?.pipeline?.scanned ?? []).some((f) => f.endsWith('.ops')) || commit?.committed === false,
+  JSON.stringify(commit?.pipeline?.scanned ?? commit?.reason))
 const dep = resultOf('ops_deploy')
 check('部署：变更号 CHG 注入 · MANUAL · 环境无关制品包', /^CHG-/.test(dep?.changeNumber ?? '') && dep?.executeMode === 'MANUAL' && dep?.pack?.envNeutral === true, `${dep?.changeNumber} · ${dep?.pack?.id}`)
 const cb = resultOf('ops_callback')

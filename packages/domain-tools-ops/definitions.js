@@ -63,8 +63,9 @@ export function buildOpsTools({ repo, ops }) {
           head: { type: 'string', description: '制品标题，如 大促批量暂停/恢复（默认）' },
           pausePath: { type: 'string', description: '暂停文件路径（默认 ops/pause_before_promotion.ops）' },
           resumePath: { type: 'string', description: '恢复文件路径（默认 ops/resume_after_promotion.ops）' },
+          approvalNote: { type: 'string', description: '【必填】审批卡话术：用业务语言写清本次确认的内容——目标清单（N 个作业名）、自动排除项及原因、排序方向、约束（checkpoint=TRUE）。审批卡只展示这段文字，写不清楚人会看不懂在确认什么' },
         },
-        required: ['jobs'],
+        required: ['jobs', 'approvalNote'],
       },
       output: jsonOut,
       execute: async ({ jobs, head, pausePath = 'ops/pause_before_promotion.ops', resumePath = 'ops/resume_after_promotion.ops' }) => {
@@ -115,6 +116,7 @@ export function buildOpsTools({ repo, ops }) {
           paths: { type: 'array', items: { type: 'string' }, description: '待部署的 .ops 路径（须已提交），默认暂停+恢复两个文件' },
           changeNumber: { type: 'string', description: '变更单号（必填，如 CHG-20260823）——部署审批与审计回溯的锚' },
           executeMode: { type: 'string', enum: ['MANUAL', 'AUTO'], description: '执行模式，默认 MANUAL（第三方平台待人工触发执行）' },
+          approvalNote: { type: 'string', description: '【必填】审批卡话术：写清部署内容（制品包文件清单、命令总数）、变更单号、执行模式、回滚兜底（恢复文件同包可立即部署）、豁免项知情确认结论' },
         },
         required: ['changeNumber'],
       },

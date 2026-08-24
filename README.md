@@ -145,6 +145,7 @@ node tests/regression/e2e-studio.mjs
 - [x] P4-3 界面（`assert-studio-repo.mjs` 23/23）：仓树 OPS 徽标（制品包通道）+ 扫描点扩展至 .ops；`.ops` 三页签——执行序列（拓扑分层视图，Layer 行 + 并行组 + JOB_TYPE 徽标 + OPTIONS 标注）/ DSL 代码 / 配对校验（`/api/ops/check` 镜像自动配对，权威在编排域 Provider）；编排入口 chip「大促暂停/恢复编排」（prompt 内嵌三道门口径）+ .ops 文件态 chips（扫描/复跑校验/部署/回调）
 - [x] P4-4 旅程实证（`assert-ops-journey.mjs` 10/10，`e2e-ops.mjs` 多轮驱动）：**真实模型（DeepSeek）两轮独立跑通**——`ops_screen` 筛选回显 →（对话式清单确认门）→ `ops_topo` 排序 → `ops_gen` 生成 → `ops_check` 自检 → `repo_commit` 提交（CICD 复扫 .ops）→ `ops_deploy` 部署（CHG 注入 · MANUAL）→ `ops_callback` 12/12 Success；工具审批恰好 3 次且顺序严格 ops_gen→repo_commit→ops_deploy；模型自发在提交后调 `cicd_scan_report` 复核流水线结论；AGENTS.md 新增「运维编排约定」（三道门话术 / 豁免知情确认 / 只产 PAUSE·RESUME / 恢复文件同包兜底）
 - [x] 配套采坑：①e2e 驱动器要处理对话式闸门（turn/end 后旅程未完则自动「确认，继续」）；②studio 的 pendingApprovals 是进程级全局——多会话并行时审批应答会串线（两轮旅程互为对方开门，后续如需并行会话要按 sessionId 隔离）
+- [x] 审批卡体验修正（V13 复盘）：**确认门一律走审批卡、禁止对话式确认**——AGENTS.md 明写「不要把清单贴进回复问『确认吗』然后结束回合」，gated 工具即确认门；approval-policy 摘要新增 `approvalNote` 约定（工具参数带它则优先采用，模型用业务语言写清「在确认什么」，替代 60 字符参数截断）；ops_gen/ops_deploy 将 approvalNote 设为必填并给话术要点；旅程断言补两条——审批卡携带业务话术（reason 不含 jobs=[ 截断）、ops_screen→第一道审批卡之间无 turn 中断（无对话门）。修正后旅程驱动 0 次对话门、审批严格 3 卡（assert-ops-journey 12/12）
 
 ### 采坑记录（本轮新增）
 
