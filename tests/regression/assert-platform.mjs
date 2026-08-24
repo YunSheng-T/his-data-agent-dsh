@@ -28,7 +28,18 @@ check('finance 仓含 etl_legacy 只读演示分包', repo.readCommitted(repo.cu
 // 分包归属（Registry 投影）
 check('分包归属：etl→主力 ETL 平台', packageOf('etl/dwd/x.etl')?.platform === '主力 ETL 平台' && packageOf('etl/dwd/x.etl').connected)
 check('分包归属：dag→调度平台', packageOf('dag/x.dag')?.platform === '调度平台')
+check('分包归属：ops→制品包通道（V13）', packageOf('ops/x.ops')?.platform === '制品包通道' && packageOf('ops/x.ops').connected)
 check('分包归属：etl_legacy→未接入只读', packageOf('etl_legacy/ods/x.etl')?.connected === false)
+
+// 文件类型契约：.ops 可写且只能写在 ops/ 下
+{
+  const w = repo.writeWorking('ops/contract_probe.ops', '-- probe\nPAUSE ETL JOB IF EXISTS etl/dwd/x.etl\n')
+  check('.ops 写入 ops/ 放行（kind=ops）', w.kind === 'ops')
+  let m = ''
+  try { repo.writeWorking('etl/dwd/bad.ops', '-- x') } catch (e) { m = e.message }
+  check('.ops 写在 ops/ 之外被拒', m.includes('必须放在 ops/'), m)
+  fs.rmSync(path.join(root, 'finance-dw', 'ops'), { recursive: true, force: true }) // 探针不进后续流程
+}
 
 // 守卫（Provider 层硬执行）
 let guardMsg = ''
@@ -96,6 +107,23 @@ repo.writeWorking('etl/dwd/uncommitted.etl', '-- @job: uncommitted\n-- @engine: 
 let noReport = ''
 try { await call('cicd_scan_report', { path: 'etl/dwd/uncommitted.etl' }) } catch (e) { noReport = e.message }
 check('未提交文件查询报告被拒', noReport.includes('没有流水线报告') || noReport.includes('不存在'), noReport)
+
+// ---------- ops 制品 CICD 扫描（V13） ----------
+repo.writeWorking('ops/big_sale_pause.ops', '-- 大促暂停制品（演示）\n-- 排序：拓扑逆序（先下游）· fail-fast\n-- ── Layer 1 · 下游（1 个 · 可并行）\nPAUSE ETL JOB IF EXISTS etl/dwd/scan_demo.etl\nWITH OPTIONS( checkpoint = TRUE )\n')
+repo.writeWorking('ops/bad_drop.ops', 'DROP TABLE dwd.x;\n')
+const rc2 = await call('repo_commit', { message: 'test: ops scan' })
+check('ops 制品提交触发流水线且两文件被扫描', rc2.pipeline?.scanned?.includes('ops/big_sale_pause.ops') && rc2.pipeline?.scanned?.includes('ops/bad_drop.ops'), JSON.stringify(rc2.pipeline?.scanned))
+const goodRep = await call('cicd_scan_report', { path: 'ops/big_sale_pause.ops' })
+check('合规 ops 扫描 pass（WITH OPTIONS 续行不误判）', goodRep.verdict === 'pass', JSON.stringify(goodRep.scans))
+check('单动作制品一致性槽位未知(null) 不误报', goodRep.scans?.consistency?.pass === null)
+const badRep = await call('cicd_scan_report', { path: 'ops/bad_drop.ops' })
+check('含 DROP 的 ops 被 fail-closed 判 diff', badRep.verdict === 'diff' && badRep.scans?.sql?.dangers?.includes('DROP'), JSON.stringify(badRep.scans?.sql))
+
+// 锚定守卫静态断言：dir 白名单含 ops（V13 分包即路由）
+{
+  const src = fs.readFileSync(new URL('../../packages/workspace-anchor/index.js', import.meta.url), 'utf8')
+  check('锚定 dir 守卫放行 ops 目录', /\^\(etl\|dag\|ops\)/.test(src))
+}
 
 const pass = checks.filter(Boolean).length
 console.log(`\n${pass}/${checks.length} 通过`)

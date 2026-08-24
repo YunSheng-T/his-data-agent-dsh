@@ -4,7 +4,7 @@
 // P3（V10）：git_add/git_commit 合并更名为 repo_commit（提交即自动触发 CICD 流水线）；
 // 新增 cicd_scan_report 只读工具 + hisCicd 服务透出（studio-ui 文件行扫描点的数据源）。
 
-import { buildDevTools, scanEtlJob } from './definitions.js'
+import { buildDevTools, scanEtlJob, scanOpsFile } from './definitions.js'
 import { LocalSimDryrunProvider } from './provider-dryrun.js'
 import { LocalSchedProvider } from './provider-sched.js'
 import { LocalCicdProvider, scanVerdict } from './provider-cicd.js'
@@ -33,14 +33,16 @@ export function apply(ctx) {
   // hisCicd：CICD 适配器透出（studio-ui 文件行扫描点 / 扫描报告查询的数据源）
   ctx.provide('hisCicd', cicd)
 
-  // 启动补登：为当前 HEAD 的已提交 .etl 生成首条流水线报告（etl_legacy 未接入平台，不被扫描）
+  // 启动补登：为当前 HEAD 的已提交 .etl/.ops 生成首条流水线报告（etl_legacy 未接入平台，不被扫描）
   try {
     const branch = ctx.hisRepo.currentBranch()
     const commitId = ctx.hisRepo.git('rev-parse', '--short', 'HEAD')
     const scans = {}
     for (const e of ctx.hisRepo.tree(branch)) {
-      if (e.kind !== 'etl' || e.path.startsWith('etl_legacy/')) continue
-      const s = scanEtlJob(ctx.hisRepo, ctx.hisModeling, e.path)
+      if (e.path.startsWith('etl_legacy/')) continue
+      const s = e.kind === 'etl' ? scanEtlJob(ctx.hisRepo, ctx.hisModeling, e.path)
+        : e.kind === 'ops' ? scanOpsFile(ctx.hisRepo, e.path)
+          : null
       if (s) scans[e.path] = s
     }
     if (Object.keys(scans).length) {

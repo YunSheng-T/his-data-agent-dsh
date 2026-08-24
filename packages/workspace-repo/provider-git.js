@@ -76,7 +76,7 @@ export class GitRepoProvider {
 
   /** 工作区状态：[{path, state}]，state: M(修改) | A(新增) | ??(未跟踪) */
   status() {
-    const out = this.gitRaw('status', '--porcelain') // 不可 trim：首行前导空格是状态列
+    const out = this.gitRaw('status', '--porcelain', '-uall') // -uall：未跟踪目录展开到文件级（否则新增 ops/ 整目录折叠成一条，契约/扫描拿不到具体文件）；不可 trim：首行前导空格是状态列
     if (!out.trim()) return []
     return out.split('\n').filter(Boolean).map((l) => {
       const m = l.match(/^(.{1,2})\s(.+)$/)
@@ -101,12 +101,13 @@ export class GitRepoProvider {
     return fs.existsSync(abs) ? fs.readFileSync(abs, 'utf8') : null
   }
 
-  /** 写工作区（未提交态）。只允许写在 etl/ 与 dag/ 下，且扩展名受文件类型契约约束 */
+  /** 写工作区（未提交态）。只允许写在 etl/、dag/、ops/ 下，且扩展名受文件类型契约约束 */
   writeWorking(relPath, content) {
     const kind = fileKind(relPath)
-    if (kind === 'other') throw new Error(`文件类型契约拒绝: ${relPath}（只接受 etl/**/*.etl 与 dag/*.dag）`)
+    if (kind === 'other') throw new Error(`文件类型契约拒绝: ${relPath}（只接受 etl/**/*.etl、dag/*.dag 与 ops/*.ops）`)
     if (kind === 'etl' && !relPath.startsWith('etl/')) throw new Error(`.etl 必须放在 etl/ 下: ${relPath}`)
     if (kind === 'dag' && !relPath.startsWith('dag/')) throw new Error(`.dag 必须放在 dag/ 下: ${relPath}`)
+    if (kind === 'ops' && !relPath.startsWith('ops/')) throw new Error(`.ops 必须放在 ops/ 下: ${relPath}`)
     const abs = path.join(this.dir, relPath)
     fs.mkdirSync(path.dirname(abs), { recursive: true })
     fs.writeFileSync(abs, content)
@@ -139,9 +140,10 @@ export class GitRepoProvider {
   }
 }
 
-/** 文件类型契约：.etl = ETL 作业；.dag = 调度作业（yaml）；其余拒绝 */
+/** 文件类型契约：.etl = ETL 作业；.dag = 调度作业（yaml）；.ops = 运维编排制品（V13）；其余拒绝 */
 export function fileKind(p) {
   if (p.endsWith('.etl')) return 'etl'
   if (p.endsWith('.dag')) return 'dag'
+  if (p.endsWith('.ops')) return 'ops'
   return 'other'
 }

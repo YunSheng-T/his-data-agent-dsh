@@ -41,7 +41,7 @@ function repoAnchorText(repo, branch, dir) {
     `[workspace.anchor] 当前工作区锚定对象（开发空间 · 代码仓视图）`,
     ...(t ? [`租户: ${t.id}（${t.cn}）${t.dataTenant ? '' : ' · 非数据租户 · 只读'} · 全地址: ${repo.address?.() ?? ''}`] : []),
     `仓: ${repo.dir.split('/').pop()} · 分支: ${branch}${dir ? ` · 作业目录: ${dir}` : ''}`,
-    `作业文件: etl ${inDir.filter((e) => e.kind === 'etl').length} 个 · dag ${inDir.filter((e) => e.kind === 'dag').length} 个${dir ? `（目录 ${dir} 内）` : ''}`,
+    `作业文件: etl ${inDir.filter((e) => e.kind === 'etl').length} 个 · dag ${inDir.filter((e) => e.kind === 'dag').length} 个 · ops ${inDir.filter((e) => e.kind === 'ops').length} 个${dir ? `（目录 ${dir} 内）` : ''}`,
     `未提交变更: ${dirty.length ? dirty.map((e) => `${e.dirty} ${e.path}`).join('；') : '无（工作区干净）'}`,
     `提示: 已提交视图与未提交态严格区分；切到 main 看不到 feature 未合并的文件`,
     `提交走 repo_commit（暂存+提交一体，自动触发 CICD 流水线）；作业扫描报告用 cicd_scan_report 查询`,
@@ -88,7 +88,7 @@ export function apply(ctx) {
         const exists = repo.branches().includes(args.branch)
         const actual = repo.checkout(args.branch, { create: !exists })
         const dir = args.dir ?? null
-        if (dir && !/^(etl|dag)(\/[a-z0-9_-]+)*$/i.test(dir)) throw new Error(`非法作业目录: ${dir}（只接受 etl/* 或 dag）`)
+        if (dir && !/^(etl|dag|ops)(\/[a-z0-9_-]+)*$/i.test(dir)) throw new Error(`非法作业目录: ${dir}（只接受 etl/*、dag 或 ops）`)
         current = { kind: 'repo', branch: actual, dir, key: `repo:${actual}:${dir ?? ''}@${repo.isClean() ? 'clean' : 'dirty'}`, at: new Date().toISOString() }
         console.error(`[anchor] 锚定 -> ${current.key}${exists ? '' : '（新建分支）'}`)
         const stale = staleJobs(ctx, repo, actual)

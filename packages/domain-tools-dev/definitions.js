@@ -50,6 +50,40 @@ export function scanEtlJob(repo, modeling, path) {
   return { design, sql, consistency }
 }
 
+/** ops 制品扫描（V13）：轻量文本规则，不依赖编排域——结构规范 / 高危词 fail-closed / 单文件配对。
+ *  暂停↔恢复跨文件配对、环检测、依赖完整性的权威判定在编排域 ops_check，此处只做提交时刻快照。 */
+export function scanOpsFile(repo, path) {
+  const text = repo.readCommitted(repo.currentBranch(), path)
+  if (text == null) return null
+  const cmdRe = /^(PAUSE|RESUME)\s+([A-Z][A-Z0-9_-]*)\s+JOB\s+(IF\s+EXISTS\s+)?(\S+)/
+  const lines = text.split('\n')
+  const cmds = []
+  const errors = []
+  for (const [i, raw] of lines.entries()) {
+    const line = raw.trim()
+    if (!line || line.startsWith('--')) continue
+    if (/^WITH\s+OPTIONS\s*\(/i.test(line)) continue // 命令的选项续行，不参与格式判定
+    const m = line.match(cmdRe)
+    if (!m) { errors.push(`L${i + 1} 命令格式不合法: ${line.slice(0, 60)}`); continue }
+    cmds.push({ line: i + 1, action: m[1], type: m[2], ifExists: !!m[3], job: m[4] })
+  }
+  const noIfExists = cmds.filter((c) => !c.ifExists)
+  if (noIfExists.length) errors.push(`缺 IF EXISTS 幂等保护: ${noIfExists.map((c) => `L${c.line}`).join(', ')}`)
+  if (cmds.length && !lines.some((l) => l.trim().startsWith('--') && /Layer\s*\d/.test(l))) {
+    errors.push('缺分层注释（-- ── Layer N），执行序列无法分层审阅')
+  }
+  if (!cmds.length && !errors.length) errors.push('空制品：无任何 PAUSE/RESUME 命令')
+  const dangers = ['DROP', 'STOP', 'KILL', 'DELETE'].filter((w) => new RegExp(`\\b${w}\\b`).test(text))
+  const design = { pass: errors.length === 0, errors: errors.length, warns: 0, issues: errors }
+  const sql = { pass: dangers.length === 0, dangers, note: '高危词 fail-closed：DROP/STOP/KILL/DELETE 不得进入 ops 制品' }
+  // 配对：同文件双动作才判；单动作文件（暂停/恢复分文件）pass:null 未知不误报
+  let consistency = { pass: null, reason: '单动作制品：配对/环/依赖完整性由编排域 ops_check 权威执行' }
+  const pauses = cmds.filter((c) => c.action === 'PAUSE').length
+  const resumes = cmds.filter((c) => c.action === 'RESUME').length
+  if (pauses && resumes) consistency = { pass: pauses === resumes, pause: pauses, resume: resumes, ...(pauses !== resumes && { diffs: [{ issue: `PAUSE ${pauses} 条 ≠ RESUME ${resumes} 条` }] }) }
+  return { design, sql, consistency }
+}
+
 export function buildDevTools({ repo, dryrun, modeling, sched, cicd }) {
   const writeTools = [
     {
@@ -151,10 +185,10 @@ function gatedTools({ repo, sched, modeling, cicd }) {
       execute: async ({ message }) => {
         const r = repo.commitAll(message)
         if (!r.committed) return { ...r, gate: 'commit', note: '无变更未产生提交' }
-        // 提交即触发 CICD 流水线：对本次提交的 .etl 现场计算三类扫描快照（演示态本地计算，正式版走 CICD API）
+        // 提交即触发 CICD 流水线：对本次提交的 .etl/.ops 现场计算扫描快照（演示态本地计算，正式版走 CICD API）
         const scans = {}
-        for (const f of r.files.filter((x) => x.endsWith('.etl'))) {
-          const s = scanEtlJob(repo, modeling, f)
+        for (const f of r.files.filter((x) => x.endsWith('.etl') || x.endsWith('.ops'))) {
+          const s = f.endsWith('.ops') ? scanOpsFile(repo, f) : scanEtlJob(repo, modeling, f)
           if (s) scans[f] = s
         }
         const pipeline = cicd?.trigger({ commitId: r.commitId, branch: r.branch, scans }) ?? null

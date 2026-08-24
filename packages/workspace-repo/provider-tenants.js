@@ -22,6 +22,7 @@ export const TENANTS = {
 export const PACKAGE_REGISTRY = [
   { prefix: 'etl/', platform: '主力 ETL 平台', connected: true },
   { prefix: 'dag/', platform: '调度平台', connected: true },
+  { prefix: 'ops/', platform: '制品包通道', connected: true },
   { prefix: 'etl_legacy/', platform: '遗留 ETL 平台', connected: false },
 ]
 
