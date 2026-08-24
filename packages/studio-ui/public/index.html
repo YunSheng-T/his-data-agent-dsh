@@ -117,6 +117,20 @@ input,textarea,select{font-family:inherit}
 .ddl-view{background:var(--term-bg);color:#d7dcd2;border-radius:10px;font-family:var(--mono);font-size:11.5px;line-height:1.75;padding:16px 18px;white-space:pre;overflow-x:auto}
 .ddl-view .cm{color:var(--term-green)}
 .ddl-view .an{color:#e8b04b}
+/* V13 · .ops 执行序列（拓扑分层 + 并行组） */
+.ops-layers{display:flex;align-items:stretch}
+.ops-layer{flex:1;border:1px solid var(--hair);border-radius:10px;background:rgba(255,255,255,.6);padding:10px;min-width:150px}
+.ops-layer-head{font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--muted);display:flex;justify-content:space-between;margin-bottom:8px;text-transform:uppercase}
+.ops-job{border:1px solid var(--hair-soft);border-radius:8px;padding:7px 9px;margin-bottom:6px;background:var(--paper)}
+.ops-job:last-child{margin-bottom:0}
+.ops-jt{font-family:var(--mono);font-size:9px;letter-spacing:.1em;padding:1px 6px;border-radius:99px;border:1px solid var(--hair);color:var(--muted)}
+.ops-jt.etl{color:#0a7a34;border-color:rgba(10,122,52,.35)}
+.ops-jt.flashsync{color:#7a4dbb;border-color:rgba(122,77,187,.35)}
+.ops-jt.ltstask{color:#9a6a14;border-color:rgba(154,106,20,.4)}
+.ops-jn{font-weight:600;font-size:12px;margin-top:4px}
+.ops-jp{font-family:var(--mono);font-size:10px;color:var(--muted);word-break:break-all}
+.ops-jc{font-family:var(--mono);font-size:10px;color:var(--ok);margin-top:2px}
+.ops-arrow{display:flex;align-items:center;padding:0 8px;color:var(--faint);font-size:14px}
 
 .pub-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 .pub-card{border:1px solid var(--hair);border-radius:10px;background:rgba(255,255,255,.45);padding:14px 16px}
@@ -336,6 +350,7 @@ function toast(m) { const t = $('#toast'); t.textContent = m; t.classList.add('s
 const MODEL_TABS = [['design','模型设计'],['er','ER 图'],['ddl','DDL'],['publish','资产发布']];
 const ETL_TABS = [['flow','可视化'],['code','代码'],['test','测试运行'],['lineage','血缘影响']];
 const DAG_TABS = [['graph','依赖图'],['yaml','配置代码']];
+const OPS_TABS = [['seq','执行序列'],['dsl','DSL 代码'],['pair','配对校验']];
 
 /* ================= 左栏：空间切换 ================= */
 document.querySelectorAll('#menu button[data-mode]').forEach((b) => b.addEventListener('click', () => {
@@ -421,7 +436,7 @@ async function loadRepoTree() {
     ${files.map((e) => {
       const legacy = off || e.pkg?.connected === false;
       return `<button class="tnode ${legacy ? 'legacy' : ''} ${active.kind === 'repo' && e.path === active.file ? 'on' : ''}" data-path="${esc(e.path)}" data-legacy="${legacy ? 1 : ''}">
-      <span class="layer ${legacy ? 'off' : ''}">${e.kind === 'dag' ? 'DAG' : 'ETL'}</span>${e.path.split('/').pop()}
+      <span class="layer ${legacy ? 'off' : ''}">${e.kind === 'dag' ? 'DAG' : e.kind === 'ops' ? 'OPS' : 'ETL'}</span>${e.path.split('/').pop()}
       ${!legacy && e.scan ? `<span class="scan-dot ${e.scan}" title="CICD 扫描 · 权威报告">${e.scan === 'pass' ? '✓' : '⚠差异'}</span>` : ''}
       ${e.stale ? '<span class="dirty-badge" title="模型 ' + esc(e.stale.model) + ' 已升至 ' + esc(e.stale.currentVersion) + '，本作业基线 ' + esc(e.stale.baseVersion) + '">模型已更新</span>' : ''}
       ${e.uncommitted ? '<span class="dirty-badge new">新增</span>' : e.dirty ? `<span class="dirty-badge">${e.dirty}</span>` : ''}
@@ -488,7 +503,7 @@ function renderFileTabs() {
 
 /* ================= 中央：工作区 ================= */
 function renderSubTabs(kind, fkind) {
-  const tabs = kind === 'model' ? MODEL_TABS : fkind === 'dag' ? DAG_TABS : ETL_TABS;
+  const tabs = kind === 'model' ? MODEL_TABS : fkind === 'dag' ? DAG_TABS : fkind === 'ops' ? OPS_TABS : ETL_TABS;
   if (!tabs.some(([k]) => k === activeTab)) activeTab = tabs[0][0];
   $('#sub-tabs').innerHTML = tabs.map(([k, label]) => `<button class="stab ${k === activeTab ? 'on' : ''}" data-tab="${k}">${label}</button>`).join('');
   $('#sub-tabs').querySelectorAll('.stab').forEach((t) => t.addEventListener('click', () => { activeTab = t.dataset.tab; renderWorkspace(); }));
@@ -711,6 +726,11 @@ async function renderRepoWs() {
   v.className = 'ws-ver' + (!ent?.dirty && !ent?.uncommitted && !ent?.stale ? ' published' : '');
   $('#ws-domain').innerHTML = `<span class="tlabel" style="text-transform:none" title="对象全地址">tenant://${esc(tn.id)}/${esc(tn.repo)}</span> <span class="tlabel">${esc(repoState.current)}</span>${ent?.pkg ? ` <span class="pkg-badge ${ent.pkg.connected ? '' : 'off'}">${esc(ent.pkg.platform)}</span>` : ''}`;
   if (f.kind === 'dag') return activeTab === 'graph' ? viewDagGraph(f) : viewDagYaml(f);
+  if (f.kind === 'ops') {
+    if (activeTab === 'dsl') return viewOpsDsl(f);
+    if (activeTab === 'pair') return viewOpsPair(f);
+    return viewOpsSeq(f);
+  }
   if (activeTab === 'flow') return viewFlow(f);
   if (activeTab === 'code') return viewCode(f);
   if (activeTab === 'test') return viewTest(f);
@@ -834,6 +854,49 @@ function viewDagYaml(f) {
   $('#ws-body').innerHTML = `<div class="sec-title">配置代码 <span class="tlabel">yaml · ref → ${esc(f.parsed.ref ?? '?')}</span></div>
     <div class="ddl-view">${esc(f.text)}</div>
     <p class="note">调度配置即代码，与 ETL 作业分离管理。修改后同样需要提交与上线确认。</p>`;
+}
+
+/* ---------- V13 · .ops 三页签（执行序列 / DSL 代码 / 配对校验） ---------- */
+function viewOpsSeq(f) {
+  const p = f.parsed;
+  const isPause = p.action === 'PAUSE';
+  const cols = p.layers.map((L, i) => `
+    <div class="ops-layer">
+      <div class="ops-layer-head">Layer ${L.n}<span>可并行</span></div>
+      ${L.jobs.map((jb) => `<div class="ops-job">
+        <span class="ops-jt ${esc(jb.type.toLowerCase().replace(/[^a-z]/g, ''))}">${esc(jb.type)}</span>
+        <div class="ops-jn">${esc(jb.path.split('/').pop())}</div>
+        <div class="ops-jp">${esc(jb.path)}</div>
+        <div class="ops-jc">${Object.entries(jb.options).map(([k, v]) => `${esc(k)}=${esc(v)}`).join(' · ')}${jb.ifExists ? ' · IF EXISTS' : ''}</div>
+      </div>`).join('')}
+    </div>${i < p.layers.length - 1 ? '<div class="ops-arrow">→</div>' : ''}`).join('');
+  $('#ws-body').innerHTML = `<div class="sec-title">执行序列 <span class="tlabel">${p.action ?? 'OPS'} · ${p.count} 条命令 · ${p.layers.length} 层</span></div>
+  <div class="er-box"><div class="ops-layers">${cols}</div></div>
+  <p class="note">${isPause ? '暂停顺序 · 先下游后上游（拓扑逆序）' : '恢复顺序 · 先上游后下游（拓扑正序 · 暂停文件的镜像）'}；同层作业无相互依赖、可并行下发。逐条命令带 IF EXISTS 与 ${isPause ? 'checkpoint=TRUE' : 'fromCheckpoint=TRUE'}，单条失败即中止后续（fail-fast），由 rollbackIfFailed 控制回滚。</p>`;
+}
+function viewOpsDsl(f) {
+  $('#ws-body').innerHTML = `<div class="sec-title">DSL 代码 <span class="tlabel">.ops · 作业命令化 DSL · 制品包交付</span></div>
+    <div class="ddl-view">${esc(f.text)}</div>
+    <p class="note">.ops 是《作业命令化 DSL 语法规范》定义的真实格式：仓内存储 → CICD 编译 → 制品包（环境无关）→ 第三方平台（LTS/FlashSync/BIDS）解析执行。Agent 只生成规范内命令，不自造语法。</p>`;
+}
+async function viewOpsPair(f) {
+  const r = await api('/api/ops/check?path=' + encodeURIComponent(active.file));
+  if (r.error || !r.mirror) {
+    $('#ws-body').innerHTML = `<div class="sec-title">配对校验</div><p class="note">${esc(r.error ?? r.note ?? '校验失败')}</p>`;
+    return;
+  }
+  const row = (st, label, note) => [`<div class="lint-row"><span class="lr-st ${st}">${st === 'ok' ? '✓' : '!'}</span>${esc(label)}<span class="lr-note">${esc(note)}</span></div>`];
+  const rows = [
+    row(r.pairing.pass ? 'ok' : 'err', 'PAUSE ↔ RESUME 配对', r.pairing.note),
+    row(r.ifExists.pass ? 'ok' : 'err', 'IF EXISTS 覆盖', r.ifExists.note),
+    row(r.cycle.pass ? 'ok' : 'err', '环检测', r.cycle.note),
+    ...r.completeness.warnings.map((w) => row('warn', `依赖完整性 · ${w.name}`, w.note)),
+    ...(r.completeness.warnings.length ? [] : [row('ok', '依赖完整性', '无集合外依赖者')]),
+    row(r.danger.pass ? 'ok' : 'err', '高危操作', r.danger.note),
+  ];
+  $('#ws-body').innerHTML = `<div class="sec-title">配对校验 <span class="tlabel">生成后自检 · 与镜像文件互查</span></div>
+    <div class="lint-list">${rows.join('')}</div>
+    <p class="note">自检在生成后、确认前自动执行（ops_check）；提交后 CICD 的 ops lint 复跑同一规则集，门禁只认流水线结果。镜像文件：${esc(r.mirror)}。</p>`;
 }
 
 /* ================= 右栏：Agent 会话流 ================= */
@@ -1039,8 +1102,19 @@ function renderChips() {
         { label: '做 dry-run 采样验证' },
         { label: '提交并上线（需两次确认）' },
       ];
+    } else if (active.kind === 'repo' && active.file?.endsWith('.ops')) {
+      const ent = repoState.tree.find((e) => e.path === active.file);
+      chips = [
+        ...(ent?.scan ? [{ label: '扫描这个制品 · ops lint', prompt: `扫描这个制品 ${active.file}：用 cicd_scan_report 取 CICD 权威报告（流水线号+规则集），逐条解读结构规范 / 高危词 / 配对结论；有差异翻译成修复方案并在我确认后修复，再引导 repo_commit 复扫清零` }] : []),
+        { label: '复跑配对校验', prompt: `对 ${active.file} 和它的镜像文件用 ops_check 复跑自检三件套（配对/环检测/依赖完整性），逐条解读结论` },
+        { label: '部署制品包（重门确认）', prompt: `部署制品包：先确认 ${active.file} 与镜像文件均已提交（未提交先走 repo_commit 第二道门），再向我索取变更单号后用 ops_deploy 交付制品包通道，执行模式 MANUAL` },
+        { label: '查询执行回调', prompt: '用 ops_callback 查询最近一次部署的逐命令回调结果（Success/Failure/Blocking 三段）并解读' },
+      ];
     } else if (active.kind === 'repo') chips = [{ label: '这个调度的上下游是什么' }, { label: '上线这个调度作业' }];
-    else chips = [{ label: '新建 dwd 层作业的 ETL 与调度' }];
+    else chips = [
+      { label: '新建 dwd 层作业的 ETL 与调度' },
+      { label: '大促暂停/恢复编排', prompt: '大促前暂停财税域非核心离线作业：先用 ops_screen 筛出目标清单并回显口径（含自动排除项）等我确认——这是第一道门；确认后再用 ops_topo 按血缘排序、ops_gen 成对生成暂停/恢复 .ops（镜像、IF EXISTS、checkpoint 配对），自检三件套结论讲清楚后引导我确认执行序列（第二道门 repo_commit）与部署（第三道门 ops_deploy，绑定变更号、MANUAL 模式）。只产出 PAUSE/RESUME，DROP 类高危命令不进入本场景' },
+    ];
   } else {
     const fd = erSel?.fieldData;
     if (erSel?.field && fd && !fd.std && !fd.skip) {

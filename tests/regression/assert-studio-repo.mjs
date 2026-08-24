@@ -15,11 +15,16 @@ const html = await fetch(BASE + '/').then((r) => r.text())
 ok('工作台页面可达', html.includes('repo-view') && html.includes('repo-tree'))
 // ER 图布局防重叠：分层分列（多 dim 表曾同坐标 (30,24) 堆叠）+ 无交互模式必须自动适配视口
 ok('ER 图分层分列布局 + 自动适配视口', html.includes('COL_ORDER') && html.includes('zoomToFit'), '防多 dim 表同坐标重叠')
+// V13 · ops 界面化静态断言：三页签 + 执行序列视图 + 配对校验端点 + 编排 chip
+ok('.ops 三页签（执行序列/DSL/配对校验）已挂载', html.includes('OPS_TABS') && html.includes('viewOpsSeq') && html.includes('viewOpsPair'))
+ok('配对校验走后端 /api/ops/check（权威在编排域 Provider）', html.includes('/api/ops/check'))
+ok('编排入口 chip「大促暂停/恢复编排」存在', html.includes('大促暂停/恢复编排'))
+ok('执行序列分层样式已定义', html.includes('.ops-layers') && html.includes('.ops-jt'))
 
 // 树：分支清单 + 当前分支 + 条目带 kind
 const tree = await fetch(BASE + '/api/repo/tree').then(j)
 ok('repo/tree 返回分支清单与当前分支', Array.isArray(tree.branches) && tree.branches.includes('main') && !!tree.current, `current=${tree.current}`)
-ok('repo/tree 条目带 kind', tree.tree.every((e) => e.path && ['etl', 'dag', 'other'].includes(e.kind)), `${tree.tree.length} 个文件`)
+ok('repo/tree 条目带 kind', tree.tree.every((e) => e.path && ['etl', 'dag', 'ops', 'other'].includes(e.kind)), `${tree.tree.length} 个文件`)
 ok('种子仓含 etl 与 dag 两组', tree.tree.some((e) => e.path.startsWith('etl/')) && tree.tree.some((e) => e.path.startsWith('dag/')))
 
 // 文件：.etl 解析出列映射（可视化页签数据契约）——锚定种子文件（含 NVL/CAST 与标准引用）

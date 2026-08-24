@@ -19,7 +19,7 @@ import { SessionId } from '@deepseek-ai/dsh-session'
 import { fileURLToPath } from 'node:url'
 
 export const name = 'his-studio-ui'
-export const inject = ['tools', 'agents', 'sessions', 'agentDefaultModel', 'hisModeling', 'hisRepo', 'hisDevAst', 'hisDryrun', 'hisCicd']
+export const inject = ['tools', 'agents', 'sessions', 'agentDefaultModel', 'hisModeling', 'hisRepo', 'hisDevAst', 'hisDryrun', 'hisCicd', 'hisOps']
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const PORT = Number(process.env.HIS_STUDIO_PORT ?? 7300)
@@ -183,7 +183,7 @@ async function route(ctx, req, res, url) {
     for (const ent of tree) {
       const pkg = ctx.hisRepo.packageOf(ent.path)
       if (pkg) ent.pkg = { platform: pkg.platform, connected: pkg.connected }
-      if (branch === current && ent.kind === 'etl' && !ent.uncommitted && !dirtySet.has(ent.path)) {
+      if (branch === current && (ent.kind === 'etl' || ent.kind === 'ops') && !ent.uncommitted && !dirtySet.has(ent.path)) {
         const v = ctx.hisCicd.verdictFor(ent.path, branch)
         if (v) ent.scan = v
       }
@@ -214,8 +214,8 @@ async function route(ctx, req, res, url) {
         ? ctx.hisRepo.readCommitted(ctx.hisRepo.currentBranch(), p)
         : ctx.hisRepo.readWorking(p)
       if (text == null) return json(res, 404, { error: `文件不存在: ${p}` })
-      const kind = p.endsWith('.dag') ? 'dag' : 'etl'
-      const parsed = kind === 'dag' ? ctx.hisDevAst.parseDag(text) : ctx.hisDevAst.parseEtl(text)
+      const kind = p.endsWith('.dag') ? 'dag' : p.endsWith('.ops') ? 'ops' : 'etl'
+      const parsed = kind === 'dag' ? ctx.hisDevAst.parseDag(text) : kind === 'ops' ? ctx.hisOps.parseOps(text) : ctx.hisDevAst.parseEtl(text)
       return json(res, 200, { path: p, kind, text, parsed })
     } catch (e) { return json(res, 400, { error: e.message }) }
   }
@@ -238,6 +238,32 @@ async function route(ctx, req, res, url) {
     const parsed = ctx.hisDevAst.parseEtl(text)
     const result = await ctx.hisDryrun.dryrun({ sql: text, parsed, sampleRows: body.sampleRows ?? 100 })
     return json(res, 200, { path: p, at: new Date().toISOString(), ...result })
+  }
+
+  // 配对校验（V13）：对指定 .ops 找同分包内动作相反的镜像文件，跑编排域自检三件套
+  if (url.pathname === '/api/ops/check') {
+    const p = url.searchParams.get('path')
+    if (!p?.endsWith('.ops')) return json(res, 400, { error: 'path 需指向 .ops 文件' })
+    const read = (f) => ctx.hisRepo.readWorking(f) ?? ctx.hisRepo.readCommitted(ctx.hisRepo.currentBranch(), f)
+    const text = read(p)
+    if (text == null) return json(res, 404, { error: `文件不存在: ${p}` })
+    const mine = ctx.hisOps.parseOps(text)
+    // 镜像 = 同目录下动作相反（PAUSE↔RESUME）的 .ops；工作区未提交的新文件也要能看见
+    const siblings = ctx.hisRepo.treeWithState(ctx.hisRepo.currentBranch()).filter((e) => e.kind === 'ops' && e.path !== p)
+    let mirror = null
+    for (const s of siblings) {
+      const t = read(s.path)
+      if (t != null && ctx.hisOps.parseOps(t).action && ctx.hisOps.parseOps(t).action !== mine.action) { mirror = { path: s.path, text: t }; break }
+    }
+    if (!mirror) return json(res, 200, { path: p, mirror: null, note: '未找到镜像文件（同分包内动作相反的 .ops）——配对校验需要暂停/恢复成对存在' })
+    const pauseText = mine.action === 'PAUSE' ? text : mirror.text
+    const resumeText = mine.action === 'PAUSE' ? mirror.text : text
+    const jobPaths = [...(pauseText + '\n' + resumeText).matchAll(/JOB\s+IF\s+EXISTS\s+(\S+)/g)].map((m) => m[1])
+    const names = ctx.hisOps.provider.catalog.filter((j) => jobPaths.includes(j.path)).map((j) => j.name)
+    return json(res, 200, {
+      path: p, mirror: mirror.path,
+      ...ctx.hisOps.provider.check({ names, pauseText, resumeText }),
+    })
   }
 
   // 会话事件流
