@@ -67,3 +67,5 @@
       name: '@his/workspace-repo'
     - id: his-domain-tools-dev
       name: '@his/domain-tools-dev'
+    - id: his-domain-tools-ops
+      name: '@his/domain-tools-ops'

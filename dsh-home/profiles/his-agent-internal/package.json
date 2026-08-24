@@ -6,7 +6,8 @@
     "@his/approval-policy": "link:../../../packages/approval-policy",
     "@his/workspace-anchor": "link:../../../packages/workspace-anchor",
     "@his/workspace-repo": "link:../../../packages/workspace-repo",
-    "@his/domain-tools-dev": "link:../../../packages/domain-tools-dev"
+    "@his/domain-tools-dev": "link:../../../packages/domain-tools-dev",
+    "@his/domain-tools-ops": "link:../../../packages/domain-tools-ops"
   },
   "dsh": {
     "profile": {
