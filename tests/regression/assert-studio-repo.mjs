@@ -21,6 +21,10 @@ ok('配对校验走后端 /api/ops/check（权威在编排域 Provider）', html
 ok('编排入口 chip「大促暂停/恢复编排」存在', html.includes('大促暂停/恢复编排'))
 ok('执行序列分层样式已定义', html.includes('.ops-layers') && html.includes('.ops-jt'))
 
+// 确定性复位：旅程/上一轮断言可能把共享仓切到别的分支（repo_checkout 是真实 git 切换），
+// 本套件的文件内容断言锚定 main——开头先切回，忽略失败（main 必存在）
+await post('/api/repo/checkout', { branch: 'main' })
+
 // 树：分支清单 + 当前分支 + 条目带 kind
 const tree = await fetch(BASE + '/api/repo/tree').then(j)
 ok('repo/tree 返回分支清单与当前分支', Array.isArray(tree.branches) && tree.branches.includes('main') && !!tree.current, `current=${tree.current}`)
@@ -33,7 +37,9 @@ const ef = await fetch(BASE + '/api/repo/file?path=' + encodeURIComponent(etlPat
 ok('repo/file 返回 text+parsed', ef.kind === 'etl' && typeof ef.text === 'string' && !!ef.parsed, etlPath)
 const col = ef.parsed.columns?.[0]
 ok('列映射字段齐全（expr/alias/comment/funcs/stdRef）', ef.parsed.columns.length >= 5 && col && 'expr' in col && 'alias' in col && 'funcs' in col && 'stdRef' in col, `${ef.parsed.columns.length} 列`)
-ok('转换函数与标准引用被识别', ef.parsed.columns.some((c) => c.funcs.length > 0) && ef.parsed.columns.some((c) => c.stdRef), ef.parsed.columns.filter((c) => c.stdRef).map((c) => `${c.alias}:${c.stdRef}`).slice(0, 2).join(' '))
+// 注意：共享仓会被旅程真实改写（codegen 重生成是直通列无 funcs），此处只断言端点结构契约；
+// funcs 提取能力（NVL/CAST）由 assert-dev-tools 在静态种子上覆盖
+ok('列解析结构契约（funcs/stdRef 字段存在，stdRef 可识别）', ef.parsed.columns.every((c) => Array.isArray(c.funcs) && 'stdRef' in c) && ef.parsed.columns.some((c) => c.stdRef), ef.parsed.columns.filter((c) => c.stdRef).map((c) => `${c.alias}:${c.stdRef}`).slice(0, 2).join(' '))
 ok('INSERT/分区/FROM 解析正确', ef.parsed.targetTable?.includes('dwd.') && !!ef.parsed.partition && ef.parsed.fromTables.length >= 1, `target=${ef.parsed.targetTable}`)
 
 // 文件：.dag 解析出 ref/cron/depends（配置页签数据契约）

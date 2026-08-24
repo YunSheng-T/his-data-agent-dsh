@@ -1,6 +1,6 @@
 # HIS Data Agent · P0 工程
 
-> 状态：P0 完成 · 建模旅程在真实模型（DeepSeek v4-flash）+ 三级门禁下端到端跑通，
+> 状态：P0–P4 完成 · 建模/开发/运维编排三条旅程均在真实模型（DeepSeek）+ 审批门禁下端到端跑通，
 > 三栏工作台表层（his-studio）已可通过浏览器驱动完整旅程（审批卡片确认/打回、Session Log 落盘）
 > 前置阅读：`HIS-Data-Agent-P0P1/his-data-agent/prompts/01-P0-建模空间实施.md`（含 M0 穿刺修正）
 
@@ -22,7 +22,7 @@ his-data-agent/
 │   └── studio-ui/                    # @his/studio-ui：node:http 三栏工作台（端口 7300）
 │       ├── index.js                  #   会话/审批/模型/代码仓/租户五类端点 + UI 应答器
 │       └── public/                   #   单文件前端 index.html + vendor/x6.js（ER 图，锁 2.18.1）
-└── tests/regression/                 # 12 套断言：静态单测 + 旅程日志分析 + studio 端点/端到端
+└── tests/regression/                 # 14 套断言 + e2e 驱动器：静态单测 + 旅程日志分析 + studio 端点/端到端
 ```
 
 ## 前置依赖（跨平台）
@@ -137,6 +137,14 @@ node tests/regression/e2e-studio.mjs
 - [x] P3-3 ER 图换 AntV X6（vendor 本地引入不依赖 CDN）：`Shape.HTML` 注册 er-table 节点（表头+字段行，内容全部实时取自模型服务）；manhattan 路由 + rounded 连接 + 1:n 边标签；**属性行真 DOM 事件委托**：点行锚定「模型 · 字段」粒度并行高亮、点实体头锚定整模型、未绑行内「＋ 补全标准」一键直达 bindfield 流程；`graph.dispose()` + shape 单次注册纪律
 - [x] 配套：AGENTS.md 增补开发空间约定（repo_commit/cicd_scan_report/只读分包/租户守卫）；assert-anchor 修「最新会话」取样脆弱性（改取最新含分支锚定的会话）
 - [x] P3-4 新建模型能力（`assert-model-create.mjs` 19/19）：新增 `model_create`（workspace-write·gated）——分层前缀自动推断/补齐、非法分层与重名拒绝、分区字段 dt 自动追加免绑、字段一次带入可直绑标准（与 bindStd 同口径校验库内/草案）；`model_alter_field` 升级为 upsert（字段不存在即新增，自动插到 dt 前）；新建模型即刻出现在工作台模型目录（/api/models 读 Provider 实况），后续绑标准→提版本→DDL→发布→锚定全链已实证。配套修复：三个旅程断言的会话取样改结构化判定（见采坑）
+
+### P4 · 作业运维编排 V13（大促批量暂停/恢复 · 提示词 04 追加场景）
+
+- [x] P4-1 基建（`assert-platform.mjs` 30/30）：文件类型契约放行 `.ops`（只写 ops/ 下）；分包注册表挂「制品包通道」；锚定 dir 白名单含 ops；CICD 扫描链接入 `.ops`（`scanOpsFile` 文本规则：命令格式 / IF EXISTS 覆盖率 / 分层注释完整性 / DROP·STOP·KILL·DELETE 高危词 fail-closed / 单文件配对；跨文件配对与环检测属编排域权威，槽位 pass:null 不误报）；修复 `git status` 未跟踪目录折叠导致新类型文件漏扫（`-uall`）
+- [x] P4-2 工具域 `@his/domain-tools-ops`（`assert-ops.mjs` 26/26）：六工具——`ops_screen`/`ops_topo`/`ops_check`/`ops_callback`（read）、`ops_gen`（commit 级=第一道门·清单确认）、`ops_deploy`（publish 级=第三道门·重门，变更号必填+默认 MANUAL）；mock Provider：财税域 8 作业目录（6 目标三层血缘 + 2 豁免）、血缘拓扑分层（暂停=逆序/恢复=正序/层内并行，**顺序只允许血缘推导**）、镜像 DSL 生成（IF EXISTS 全覆盖 · checkpoint/fromCheckpoint 配对）、自检三件套（依赖完整性告警点名豁免项）、制品库 `ops_change_pack_{commit}.zip`（环境无关）+ 回调模拟；环检测有环拒排序转人工；DROP 从生成器结构上不存在（fail-closed）；`parseOps` 经 `hisOps` 服务透出
+- [x] P4-3 界面（`assert-studio-repo.mjs` 23/23）：仓树 OPS 徽标（制品包通道）+ 扫描点扩展至 .ops；`.ops` 三页签——执行序列（拓扑分层视图，Layer 行 + 并行组 + JOB_TYPE 徽标 + OPTIONS 标注）/ DSL 代码 / 配对校验（`/api/ops/check` 镜像自动配对，权威在编排域 Provider）；编排入口 chip「大促暂停/恢复编排」（prompt 内嵌三道门口径）+ .ops 文件态 chips（扫描/复跑校验/部署/回调）
+- [x] P4-4 旅程实证（`assert-ops-journey.mjs` 10/10，`e2e-ops.mjs` 多轮驱动）：**真实模型（DeepSeek）两轮独立跑通**——`ops_screen` 筛选回显 →（对话式清单确认门）→ `ops_topo` 排序 → `ops_gen` 生成 → `ops_check` 自检 → `repo_commit` 提交（CICD 复扫 .ops）→ `ops_deploy` 部署（CHG 注入 · MANUAL）→ `ops_callback` 12/12 Success；工具审批恰好 3 次且顺序严格 ops_gen→repo_commit→ops_deploy；模型自发在提交后调 `cicd_scan_report` 复核流水线结论；AGENTS.md 新增「运维编排约定」（三道门话术 / 豁免知情确认 / 只产 PAUSE·RESUME / 恢复文件同包兜底）
+- [x] 配套采坑：①e2e 驱动器要处理对话式闸门（turn/end 后旅程未完则自动「确认，继续」）；②studio 的 pendingApprovals 是进程级全局——多会话并行时审批应答会串线（两轮旅程互为对方开门，后续如需并行会话要按 sessionId 隔离）
 
 ### 采坑记录（本轮新增）
 
