@@ -3,6 +3,7 @@
 > 状态：P0–P4 完成 · 建模/开发/运维编排三条旅程均在真实模型（DeepSeek）+ 审批门禁下端到端跑通，
 > 三栏工作台表层（his-studio）已可通过浏览器驱动完整旅程（审批卡片确认/打回、Session Log 落盘）
 > 前置阅读：`HIS-Data-Agent-P0P1/his-data-agent/prompts/01-P0-建模空间实施.md`（含 M0 穿刺修正）
+> 读代码导读：`docs/STRUCTURE.md`（每个包/文件负责什么、扩展改哪里）
 
 ## 布局
 
