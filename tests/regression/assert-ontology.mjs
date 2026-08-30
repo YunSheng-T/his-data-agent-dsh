@@ -8,6 +8,7 @@ import { provider } from '../../packages/domain-tools-ontology/provider-mock.js'
 import { buildDefinitions } from '../../packages/domain-tools-ontology/definitions.js'
 import { TenantRepoProvider } from '../../packages/workspace-repo/provider-tenants.js'
 import { SEED_FILES, SEED_EXTRAS } from '../../packages/workspace-repo/seed-repo.js'
+import { scanScriptJob } from '../../packages/domain-tools-dev/definitions.js'
 
 const checks = []
 const check = (label, ok, extra = '') => { checks.push(ok); console.log((ok ? 'PASS' : 'FAIL') + ' ' + label + (extra ? ' — ' + extra : '')) }
@@ -60,6 +61,12 @@ check('explain F-101 归因链', e1.chain.includes('R-102') && e1.chain.includes
 // 7. propose：gated 提案
 const pr = call('ontology_propose', { kind: 'assertion', payload: { instanceOf: 'schema-change' }, approvalNote: '确认该作业归类为表结构变更' })
 check('propose 返回提案号与治理状态', pr.proposalId && pr.status === 'pending-governance')
+
+// 8. P4：scanScriptJob 本体驱动扫描（.sql 纳入 CICD 扫描 + 一致性消费匹配事实）
+const ss = scanScriptJob(repo, null, provider, 'dbscript/alter_dwd_tax_payment_v4.sql')
+check('P4 scanScriptJob 本体分类+规则18', ss.ontology && ss.ontology.jobType === '表结构变更' && ss.ontology.ruleCount === 18, JSON.stringify(ss.ontology))
+check('P4 scanScriptJob 一致性消费匹配事实（类型冲突→diff）', ss.consistency.pass === false && ss.consistency.diffs.some((d) => d.field === 'tax_rate'), JSON.stringify(ss.consistency.diffs))
+check('P4 scanVerdict 判 script 结论为 diff', (await import('../../packages/domain-tools-dev/provider-cicd.js')).scanVerdict(ss) === 'diff', '(scanVerdict)')
 
 const pass = checks.filter(Boolean).length
 console.log('\n== ontology: ' + pass + '/' + checks.length + ' 通过 ==')

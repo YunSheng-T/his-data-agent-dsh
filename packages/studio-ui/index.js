@@ -229,7 +229,7 @@ async function route(ctx, req, res, url) {
     if (!onto) return json(res, 500, { error: 'hisOntology 服务未挂载' })
     const engine = (text.match(/--\s*@engine:\s*(\S+)/) || [])[1] ?? 'Hive SQL'
     const ast = /ADD\s+COLUMNS/i.test(text) ? { alterAddColumns: true } : /\b(UPDATE|INSERT\s+INTO)\b/i.test(text) ? { dml: true } : {}
-    const physicalTable = (text.match(/ALTER\s+TABLE\s+(\S+)/i) || (text.match(/FROM\s+(\S+)/i) || [])[1]) ?? null
+    const physicalTable = (text.match(/ALTER\s+TABLE\s+(\S+)/i)?.[1] || (text.match(/FROM\s+(\S+)/i) || [])[1]) ?? null
     const cls = onto.classify({ path: p, engine, ast })
     const pol = cls.ok ? onto.policies(cls.jobType, { tenant: ctx.hisRepo.currentTenant()?.id ?? 'finance' }) : null
     const rl = pol ? onto.rules((pol.hit || []).map((x) => x.id)) : null

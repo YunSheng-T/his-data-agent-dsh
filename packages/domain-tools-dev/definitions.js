@@ -84,7 +84,27 @@ export function scanOpsFile(repo, path) {
   return { design, sql, consistency }
 }
 
-export function buildDevTools({ repo, dryrun, modeling, sched, cicd }) {
+/** 本体驱动扫描（V15 @his/domain-tools-ontology）：对 .sql 脚本作业走本体分类/策略/规则/增量匹配，产出与 scanEtlJob 兼容的三类结论 + 本体事实。
+ *  与 scanEtlJob 分工：.etl 走既有设计质量/SQL/一致性；.sql(dbscript) 走本体扫描（扫什么由本体驱动）。
+ *  一致性消费 matchIncrement 事实（四态 MATCH/AHEAD/BEHIND/DIVERGE），而非各自重新 diff。 */
+export function scanScriptJob(repo, modeling, onto, path) {
+  const text = repo.readCommitted(repo.currentBranch(), path)
+  if (text == null) return null
+  const ast = /ADD\s+COLUMNS/i.test(text) ? { alterAddColumns: true } : /\b(UPDATE|INSERT\s+INTO)\b/i.test(text) ? { dml: true } : {}
+  const engine = (text.match(/--\s*@engine:\s*(\S+)/) || [])[1] ?? 'Hive SQL'
+  const physicalTable = (text.match(/ALTER\s+TABLE\s+(\S+)/i)?.[1] || (text.match(/FROM\s+(\S+)/i) || [])[1]) ?? null
+  const cls = onto ? onto.classify({ path, engine, ast }) : { ok: false, note: '本体服务未挂载' }
+  const pol = cls.ok && onto ? onto.policies(cls.jobType, { tenant: 'finance' }) : null
+  const rl = pol && onto ? onto.rules((pol.hit || []).map((p) => p.id)) : null
+  const match = physicalTable && cls.ok && onto ? onto.matchIncrement(null, { physicalTable }) : null
+  const design = cls.ok ? { pass: true, errors: 0, warns: 0, issues: [] } : { pass: false, errors: 1, warns: 0, issues: [{ rule: 'ontology.classify', level: 'error', message: (cls.note || '本体分类失败') }] }
+  const sql = { pass: !ast.dml || ast.alterAddColumns, partition: null, dangers: ast.dml && !ast.alterAddColumns ? ['DML 订正'] : [] }
+  const conflict = match ? match.conflicts.filter((c) => c.kind === 'MATCH-CONFLICT') : []
+  const consistency = match ? { pass: conflict.length === 0, model: match.implements ? match.implements.modelName : null, diffs: conflict.map((c) => ({ field: c.field, issue: c.field + ' ' + c.note })) } : { pass: null, reason: '无匹配模型/基线' }
+  return { design, sql, consistency, ontology: rl ? { jobType: cls.jobTypeName, ruleCount: rl.count, implVersion: rl.implVersion, matchStatus: match ? match.status : null, conflictCount: conflict.length } : null }
+}
+
+export function buildDevTools({ repo, dryrun, modeling, sched, cicd, onto }) {
   const writeTools = [
     {
       name: 'etl_codegen', risk: 'workspace-write',
@@ -170,12 +190,12 @@ export function buildDevTools({ repo, dryrun, modeling, sched, cicd }) {
   return [
     ...readTools({ repo, dryrun, modeling, cicd }),
     ...writeTools,
-    ...gatedTools({ repo, sched, modeling, cicd }),
+    ...gatedTools({ repo, sched, modeling, cicd, onto }),
   ]
 }
 
 /** gated 闸门组（P1-4 → P3 数据化）：commit 闸门挂 CICD 流水线 + 上线闸门 + 上线后的血缘回写 */
-function gatedTools({ repo, sched, modeling, cicd }) {
+function gatedTools({ repo, sched, modeling, cicd, onto }) {
   return [
     {
       name: 'repo_commit', risk: 'commit',
@@ -187,8 +207,8 @@ function gatedTools({ repo, sched, modeling, cicd }) {
         if (!r.committed) return { ...r, gate: 'commit', note: '无变更未产生提交' }
         // 提交即触发 CICD 流水线：对本次提交的 .etl/.ops 现场计算扫描快照（演示态本地计算，正式版走 CICD API）
         const scans = {}
-        for (const f of r.files.filter((x) => x.endsWith('.etl') || x.endsWith('.ops'))) {
-          const s = f.endsWith('.ops') ? scanOpsFile(repo, f) : scanEtlJob(repo, modeling, f)
+        for (const f of r.files.filter((x) => x.endsWith('.etl') || x.endsWith('.ops') || x.endsWith('.sql'))) {
+          const s = f.endsWith('.ops') ? scanOpsFile(repo, f) : f.endsWith('.sql') ? scanScriptJob(repo, modeling, onto, f) : scanEtlJob(repo, modeling, f)
           if (s) scans[f] = s
         }
         const pipeline = cicd?.trigger({ commitId: r.commitId, branch: r.branch, scans }) ?? null
