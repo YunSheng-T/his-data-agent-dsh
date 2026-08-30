@@ -16,8 +16,8 @@ const check = (label, ok, extra = '') => { checks.push(ok); console.log(`${ok ? 
 // 1. 种子仓形态
 check('种子仓初始化：main 分支', repo.currentBranch() === 'main')
 const mainTree = repo.tree('main')
-check('种子仓 4 个文件（2 .etl + 2 .dag）', mainTree.length === 4, mainTree.map((e) => e.path).join(','))
-check('文件类型契约识别', mainTree.filter((e) => e.kind === 'etl').length === 2 && mainTree.filter((e) => e.kind === 'dag').length === 2)
+check('种子仓 6 个文件（2 .etl + 2 .dag + 1 .sql + 1 .svc）', mainTree.length === 6, mainTree.map((e) => e.path).join(','))
+check('文件类型契约识别', mainTree.filter((e) => e.kind === 'etl').length === 2 && mainTree.filter((e) => e.kind === 'dag').length === 2 && mainTree.filter((e) => e.kind === 'script').length === 1 && mainTree.filter((e) => e.kind === 'svc').length === 1)
 
 // 2. feature 分支隔离（验收条款 7）
 repo.checkout('feature/invoice', { create: true })

@@ -66,6 +66,28 @@ alert:
   on: [failure]
 timeout: 900
 `,
+
+  'dbscript/alter_dwd_tax_payment_v4.sql': `-- alter_dwd_tax_payment_v4.sql · dwd_tax_payment 模型 v4 变更脚本（数据库脚本平台）
+-- 目标表: dwd_tax_payment · 设计来源: 模型 v3→v4 增量 · 执行窗口: 发布 REL-0905 前
+ALTER TABLE dwd_tax_payment ADD COLUMNS (
+  tax_rate  DOUBLE  COMMENT '缴款税率（本次新增 · 开发中）'
+);
+-- 待补：pay_fee DECIMAL(14,2)（设计 v4 已含 · 待开发事项，随下批脚本）
+`,
+
+
+  'svc/tax_payment_query_api.svc': `-- tax_payment_query_api.svc · 缴款记录查询 API（数据服务平台）
+-- 模式: SQL -> API 消费作业 · 方法: GET · 路径: /tax/payment/query · 限流 100 QPS · 鉴权 token
+SELECT
+  pay_id        -- 缴款ID
+, decl_id       -- 关联申报
+, pay_fee       -- 手续费
+, tax_rate      -- 缴款税率
+, dt            -- 月分区
+FROM dwd_tax_payment
+WHERE decl_id = :decl_id      -- 参数化 · 防注入
+  AND dt = :dt;
+`,
 }
 
 /** V10 平台化补种：未接入平台分包（etl_legacy/）只读演示——照常可见，但不可锚定不可写 */

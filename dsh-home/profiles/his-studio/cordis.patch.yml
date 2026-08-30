@@ -68,5 +68,7 @@
       name: '@his/domain-tools-dev'
     - id: his-domain-tools-ops
       name: '@his/domain-tools-ops'
+    - id: his-domain-tools-ontology
+      name: '@his/domain-tools-ontology'
     - id: his-studio-ui
       name: '@his/studio-ui'

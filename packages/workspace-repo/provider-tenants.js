@@ -20,8 +20,10 @@ export const TENANTS = {
 
 /** 分包注册表：路径前缀 → 归属平台（connected=false = 未接入 · 只读演示） */
 export const PACKAGE_REGISTRY = [
+  { prefix: 'dbscript/', platform: '数据库脚本平台', connected: true },
   { prefix: 'etl/', platform: '主力 ETL 平台', connected: true },
   { prefix: 'dag/', platform: '调度平台', connected: true },
+  { prefix: 'svc/', platform: '数据服务平台', connected: true },
   { prefix: 'ops/', platform: '制品包通道', connected: true },
   { prefix: 'etl_legacy/', platform: '遗留 ETL 平台', connected: false },
 ]

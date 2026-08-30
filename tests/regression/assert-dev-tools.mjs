@@ -18,7 +18,7 @@ const check = (label, ok, extra = '') => { checks.push(ok); console.log(`${ok ? 
 
 // repo_checkout
 const co = await call('repo_checkout', { branch: 'main' })
-check('repo_checkout 返回目录树', co.branch === 'main' && co.tree.length === 4)
+check('repo_checkout 返回目录树', co.branch === 'main' && co.tree.length === 6)
 let threw = false
 try { await call('repo_checkout', { branch: 'feature/nope' }) } catch { threw = true }
 check('不存在分支未显式 create 时拒绝', threw)

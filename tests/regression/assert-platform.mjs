@@ -29,6 +29,8 @@ check('finance 仓含 etl_legacy 只读演示分包', repo.readCommitted(repo.cu
 check('分包归属：etl→主力 ETL 平台', packageOf('etl/dwd/x.etl')?.platform === '主力 ETL 平台' && packageOf('etl/dwd/x.etl').connected)
 check('分包归属：dag→调度平台', packageOf('dag/x.dag')?.platform === '调度平台')
 check('分包归属：ops→制品包通道（V13）', packageOf('ops/x.ops')?.platform === '制品包通道' && packageOf('ops/x.ops').connected)
+check('分包归属：dbscript→数据库脚本平台（V15）', packageOf('dbscript/alter_x.sql')?.platform === '数据库脚本平台' && packageOf('dbscript/alter_x.sql').connected)
+check('分包归属：svc→数据服务平台（V15）', packageOf('svc/x.svc')?.platform === '数据服务平台' && packageOf('svc/x.svc').connected)
 check('分包归属：etl_legacy→未接入只读', packageOf('etl_legacy/ods/x.etl')?.connected === false)
 
 // 文件类型契约：.ops 可写且只能写在 ops/ 下
@@ -39,6 +41,22 @@ check('分包归属：etl_legacy→未接入只读', packageOf('etl_legacy/ods/x
   try { repo.writeWorking('etl/dwd/bad.ops', '-- x') } catch (e) { m = e.message }
   check('.ops 写在 ops/ 之外被拒', m.includes('必须放在 ops/'), m)
   fs.rmSync(path.join(root, 'finance-dw', 'ops'), { recursive: true, force: true }) // 探针不进后续流程
+}
+
+// 文件类型契约：.sql → dbscript/，.svc → svc/（V15 数据库脚本 / 数据服务平台）
+{
+  const w = repo.writeWorking('dbscript/alter_probe.sql', '-- probe\nALTER TABLE x ADD COLUMNS (a INT)\n')
+  check('.sql 写入 dbscript/ 放行（kind=script）', w.kind === 'script')
+  const w2 = repo.writeWorking('svc/x_probe.svc', '-- probe\nSELECT 1\n')
+  check('.svc 写入 svc/ 放行（kind=svc）', w2.kind === 'svc')
+  let m2 = ''
+  try { repo.writeWorking('etl/dwd/bad.sql', '-- x') } catch (e) { m2 = e.message }
+  check('.sql 写在 dbscript/ 之外被拒', m2.includes('必须放在 dbscript/'), m2)
+  let m3 = ''
+  try { repo.writeWorking('dag/bad.svc', '-- x') } catch (e) { m3 = e.message }
+  check('.svc 写在 svc/ 之外被拒', m3.includes('必须放在 svc/'), m3)
+  fs.rmSync(path.join(root, 'finance-dw', 'dbscript'), { recursive: true, force: true })
+  fs.rmSync(path.join(root, 'finance-dw', 'svc'), { recursive: true, force: true })
 }
 
 // 守卫（Provider 层硬执行）

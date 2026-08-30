@@ -19,7 +19,7 @@ import { SessionId } from '@deepseek-ai/dsh-session'
 import { fileURLToPath } from 'node:url'
 
 export const name = 'his-studio-ui'
-export const inject = ['tools', 'agents', 'sessions', 'agentDefaultModel', 'hisModeling', 'hisRepo', 'hisDevAst', 'hisDryrun', 'hisCicd', 'hisOps']
+export const inject = ['tools', 'agents', 'sessions', 'agentDefaultModel', 'hisModeling', 'hisRepo', 'hisDevAst', 'hisDryrun', 'hisCicd', 'hisOps', 'hisOntology']
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const PORT = Number(process.env.HIS_STUDIO_PORT ?? 7300)
@@ -214,10 +214,28 @@ async function route(ctx, req, res, url) {
         ? ctx.hisRepo.readCommitted(ctx.hisRepo.currentBranch(), p)
         : ctx.hisRepo.readWorking(p)
       if (text == null) return json(res, 404, { error: `文件不存在: ${p}` })
-      const kind = p.endsWith('.dag') ? 'dag' : p.endsWith('.ops') ? 'ops' : 'etl'
+      const kind = p.endsWith('.dag') ? 'dag' : p.endsWith('.ops') ? 'ops' : p.endsWith('.sql') ? 'script' : p.endsWith('.svc') ? 'svc' : 'etl'
       const parsed = kind === 'dag' ? ctx.hisDevAst.parseDag(text) : kind === 'ops' ? ctx.hisOps.parseOps(text) : ctx.hisDevAst.parseEtl(text)
       return json(res, 200, { path: p, kind, text, parsed })
     } catch (e) { return json(res, 400, { error: e.message }) }
+  }
+  // 本体驱动扫描（V15 @his/domain-tools-ontology）：对脚本作业做本体分类/策略/规则/增量匹配/归因，返回扫描数据供前端渲染
+  if (url.pathname === '/api/repo/onto-scan') {
+    const p = url.searchParams.get('path')
+    if (!p) return json(res, 400, { error: 'path required' })
+    const text = ctx.hisRepo.readWorking(p) ?? ctx.hisRepo.readCommitted(ctx.hisRepo.currentBranch(), p)
+    if (text == null) return json(res, 404, { error: '文件不存在: ' + p })
+    const onto = ctx.hisOntology
+    if (!onto) return json(res, 500, { error: 'hisOntology 服务未挂载' })
+    const engine = (text.match(/--\s*@engine:\s*(\S+)/) || [])[1] ?? 'Hive SQL'
+    const ast = /ADD\s+COLUMNS/i.test(text) ? { alterAddColumns: true } : /\b(UPDATE|INSERT\s+INTO)\b/i.test(text) ? { dml: true } : {}
+    const physicalTable = (text.match(/ALTER\s+TABLE\s+(\S+)/i) || (text.match(/FROM\s+(\S+)/i) || [])[1]) ?? null
+    const cls = onto.classify({ path: p, engine, ast })
+    const pol = cls.ok ? onto.policies(cls.jobType, { tenant: ctx.hisRepo.currentTenant()?.id ?? 'finance' }) : null
+    const rl = pol ? onto.rules((pol.hit || []).map((x) => x.id)) : null
+    const match = physicalTable && cls.ok ? onto.matchIncrement(null, { physicalTable }) : null
+    const findings = onto.listFindings().map((f) => ({ ...f, explain: onto.explain(f.id) }))
+    return json(res, 200, { path: p, classify: cls, policies: pol?.hit ?? [], filtered: pol?.filtered ?? [], rules: rl ?? null, match, findings, trace: onto.trace(), ontVersion: onto.ontVersion })
   }
   if (url.pathname === '/api/repo/lineage') {
     const p = url.searchParams.get('path')
