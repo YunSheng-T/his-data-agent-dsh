@@ -140,7 +140,7 @@ export const provider = {
       else if (c.conflict) conflicts.push({ field: d.name, kind: 'MATCH-CONFLICT', design: d.type, code: c.type, note: '类型冲突' })
       else if (c.behind) conflicts.push({ field: d.name, kind: 'BEHIND', design: d.type, code: null, note: '未实现（待开发事项）' })
     }
-    const status = conflicts.some((c) => c.kind === 'MATCH-CONFLICT') ? 'MATCH-CONFLICT' : conflicts.some((c) => c.kind === 'BEHIND') ? 'BEHIND' : 'MATCH'
+    const status = conflicts.some((c) => c.kind === 'DIVERGE') ? 'DIVERGE' : conflicts.some((c) => c.kind === 'MATCH-CONFLICT') ? 'MATCH-CONFLICT' : conflicts.some((c) => c.kind === 'AHEAD') ? 'AHEAD' : conflicts.some((c) => c.kind === 'BEHIND') ? 'BEHIND' : 'MATCH'
     return {
       ok: true, implements: { model: model.id, physicalTable: model.physicalTable, modelName: model.name },
       releaseBaseline: { release: release.id, modelVersion: release.modelVersion, commit: release.commit },
@@ -157,7 +157,8 @@ export const provider = {
   },
 
   propose(payload) {
-    return { proposalId: 'prop-' + Date.now().toString(36), status: 'pending-governance', payload, ts: now(), note: '提案进本体平台治理流程审批；Agent 不直接改本体定义' }
+    const kind = payload && ['proposal', 'assertion', 'diverge-ruling'].includes(payload.kind) ? payload.kind : 'proposal'
+    return { proposalId: 'prop-' + Date.now().toString(36), kind, status: 'pending-governance', payload, ts: now(), note: '提案/断言/裁决进本体平台治理流程审批；Agent 不直接改本体定义' }
   },
 
   scanPlan(jobTypeId, ctx = {}) {

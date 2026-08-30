@@ -61,6 +61,8 @@ check('explain F-101 归因链', e1.chain.includes('R-102') && e1.chain.includes
 // 7. propose：gated 提案
 const pr = call('ontology_propose', { kind: 'assertion', payload: { instanceOf: 'schema-change' }, approvalNote: '确认该作业归类为表结构变更' })
 check('propose 返回提案号与治理状态', pr.proposalId && pr.status === 'pending-governance')
+check('propose 支持 proposal/assertion/diverge-ruling 三 kind（治理流）', ['proposal', 'assertion', 'diverge-ruling'].every((k) => { const r = tools.get('ontology_propose').execute({ kind: k, payload: { x: 1 }, approvalNote: '确认' }); return r.kind === k && r.proposalId && r.status === 'pending-governance' }))
+check('propose DIVERGE 裁决回写（diverge-ruling）', tools.get('ontology_propose').execute({ kind: 'diverge-ruling', payload: { finding: 'F-101', verdict: 'adopt-model' }, approvalNote: '裁决以设计侧为准' }).kind === 'diverge-ruling')
 
 // 8. P4：scanScriptJob 本体驱动扫描（.sql 纳入 CICD 扫描 + 一致性消费匹配事实）
 const ss = scanScriptJob(repo, null, provider, 'dbscript/alter_dwd_tax_payment_v4.sql')
