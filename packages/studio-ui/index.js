@@ -19,7 +19,7 @@ import { SessionId } from '@deepseek-ai/dsh-session'
 import { fileURLToPath } from 'node:url'
 
 export const name = 'his-studio-ui'
-export const inject = ['tools', 'agents', 'sessions', 'agentDefaultModel', 'hisModeling', 'hisRepo', 'hisDevAst', 'hisDryrun', 'hisCicd', 'hisOps', 'hisOntology']
+export const inject = ['tools', 'agents', 'sessions', 'agentDefaultModel', 'hisModeling', 'hisRepo', 'hisDevAst', 'hisDryrun', 'hisCicd', 'hisOps', 'hisOntology', 'hisAnchor']
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const PORT = Number(process.env.HIS_STUDIO_PORT ?? 7300)
@@ -230,12 +230,34 @@ async function route(ctx, req, res, url) {
     const engine = (text.match(/--\s*@engine:\s*(\S+)/) || [])[1] ?? 'Hive SQL'
     const ast = /ADD\s+COLUMNS/i.test(text) ? { alterAddColumns: true } : /\b(UPDATE|INSERT\s+INTO)\b/i.test(text) ? { dml: true } : {}
     const physicalTable = (text.match(/ALTER\s+TABLE\s+(\S+)/i)?.[1] || (text.match(/FROM\s+(\S+)/i) || [])[1]) ?? null
-    const cls = onto.classifyJob({ path: p, engine, ast })
+    // 锚定优先取 workspace-anchor 当前态；未锚定（如首次进入扫描页）时回退到被扫文件的目录，
+    // 保证「当前锚定的对象是什么」始终有真实依据，而不是调用方现编
+    const anchorSvc = {
+      getCurrent: () => {
+        const cur = ctx.hisAnchor && ctx.hisAnchor.getCurrent ? ctx.hisAnchor.getCurrent() : null
+        if (cur) return cur
+        const dir = p.split('/').slice(0, -1).join('/')
+        return dir ? { kind: 'repo', branch: ctx.hisRepo.currentBranch(), dir, key: 'repo:' + ctx.hisRepo.currentBranch() + ':' + dir } : null
+      },
+    }
+    const octx = { repo: ctx.hisRepo, modeling: ctx.hisModeling, anchor: anchorSvc }
+    const anchored = onto.anchoredObject(octx)
+    const cls = onto.classifyJob({ path: p, engine, ast }, octx)
     const pol = cls.ok ? onto.policiesFor(cls.jobType) : null
     const rl = cls.ok ? onto.rulesFor(cls.jobType) : null
-    const match = cls.ok ? onto.consistencyCheck(cls.jobId, {}) : null
-    const findings = onto.listFindings().map((f) => ({ ...f, explain: onto.explainFinding(f.id) }))
-    return json(res, 200, { path: p, classify: cls, policies: pol?.policies ?? [], rules: rl ?? null, match, findings, trace: onto.trace(), ontVersion: onto.ontVersion })
+    const plan = cls.ok ? onto.scanPlan(cls.jobType) : null
+    const match = cls.ok ? onto.consistencyCheck(p, octx) : null
+    // 发现项现场派生自一致性冲突（非写死 FINDINGS）：只对真实冲突产生 finding
+    const findings = (match && match.conflicts || []).map((c, i) => ({
+      id: 'F-' + (101 + i),
+      severity: c.kind === 'MATCH-CONFLICT' ? '告警 · 可修复' : c.kind === 'BEHIND' ? 'BEHIND · 提示不阻断' : 'info',
+      target: c.field,
+      rule: (c.kind === 'MATCH-CONFLICT' ? 'rule/rc@dbscript-field-type' : 'rule/rc@dbscript-field-missing'),
+      desc: c.field + '：设计 ' + c.design + '、代码 ' + (c.code || '未实现') + (c.note ? ' —— ' + c.note : ''),
+      chain: (c.kind === 'MATCH-CONFLICT' ? 'R-102 字段类型一致性' : 'R-103 字段缺失/多余') + ' ← 设计开发一致性策略 ← ' + (cls && cls.instanceName) + ' ｜ 基线 ' + (match.releaseBaseline && match.releaseBaseline.modelVersion || ''),
+      fix: c.kind === 'MATCH-CONFLICT' ? { column: c.field, from: c.code, to: c.design } : null,
+    }))
+    return json(res, 200, { path: p, anchored, classify: cls, policies: pol?.policies ?? [], rules: rl ?? null, scanPlan: plan, match, findings, trace: onto.trace(), context: onto.graphContext(octx, p), ontVersion: onto.ontVersion })
   }
   if (url.pathname === '/api/repo/lineage') {
     const p = url.searchParams.get('path')

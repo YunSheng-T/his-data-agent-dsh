@@ -7,12 +7,18 @@ import { buildDefinitions } from './definitions.js'
 import { provider } from './provider-mock.js'
 
 export const name = 'his-domain-tools-ontology'
-export const inject = ['tools', 'hisRepo']
+// 注意：不静态 inject hisAnchor——workspace-anchor → hisDevAst(dev) → hisOntology(ontology) 已构成链，
+// 若 ontology 再静态依赖 hisAnchor 会形成环（anchor→dev→ontology→anchor）。锚定状态改为工具调用时惰性取：
+export const inject = ['tools', 'hisRepo', 'hisModeling']
 
 export function apply(ctx, config = {}) {
   const p = config.provider ?? provider
   ctx.provide('hisOntology', p)
-  const defs = buildDefinitions(p, { repo: ctx.hisRepo })
+  const anchorSvc = {
+    getCurrent: () => ctx.get('hisAnchor')?.getCurrent?.() ?? null,
+    key: () => ctx.get('hisAnchor')?.key?.() ?? null,
+  }
+  const defs = buildDefinitions(p, { repo: ctx.hisRepo, modeling: ctx.hisModeling, anchor: anchorSvc })
   for (const def of defs) ctx.tools.register(def)
   console.error('[domain-tools-ontology] registered: ' + defs.map((d) => d.name + '(' + d.risk + ')').join(' '))
 }

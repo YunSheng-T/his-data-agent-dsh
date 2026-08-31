@@ -140,7 +140,7 @@ check('含 DROP 的 ops 被 fail-closed 判 diff', badRep.verdict === 'diff' && 
 // 锚定守卫静态断言：dir 白名单含 ops（V13 分包即路由）
 {
   const src = fs.readFileSync(new URL('../../packages/workspace-anchor/index.js', import.meta.url), 'utf8')
-  check('锚定 dir 守卫放行 ops 目录', /\^\(etl\|dag\|ops\)/.test(src))
+  check('锚定 dir 守卫放行 ops 目录', /(etl|dag|ops|dbscript|svc)/.test(src) && /\^\(etl\|dag\|ops\|dbscript\|svc\)/.test(src))
 }
 
 const pass = checks.filter(Boolean).length

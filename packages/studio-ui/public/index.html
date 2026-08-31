@@ -850,14 +850,66 @@ function viewTest(f) {
 async function viewScriptScan(f) {
   const d = await api('/api/repo/onto-scan?path=' + encodeURIComponent(active.file));
   if (d.error) { $('#ws-body').innerHTML = '<p class="note">' + esc(d.error) + '</p>'; return; }
-  const cls = d.classify, pol = d.policies || [], rl = d.rules, match = d.match, findings = d.findings || [], trace = d.trace || [];
+  const cls = d.classify, pol = d.policies || [], rl = d.rules, match = d.match, findings = d.findings || [], trace = d.trace || [], plan = d.scanPlan || null;
   if (!cls || !cls.ok) { $('#ws-body').innerHTML = '<p class="note">' + esc((cls && cls.note) || '本体分类失败（fail-closed 转人工归类）') + '</p>'; return; }
   let h = '<div class="sec-title">本体驱动扫描 <span class="tlabel">' + esc(active.file) + '</span></div>';
   const rlb = match && match.releaseBaseline ? match.releaseBaseline : null;
   const impls = (rl && rl.rules ? rl.rules.map(function (r) { return r.impl ? r.impl.ruleset : null }).filter(Boolean) : []);
   const implUnique = impls.length ? impls.filter(function (v, i) { return impls.indexOf(v) === i }).join(' / ') : '—';
   const stats = '策略 <b>' + pol.length + '</b> · 规则 <b>' + (rl ? rl.ruleCount : '—') + '</b> · RuleImpl <b>' + implUnique + '</b> · 基线 <b>' + (rlb ? rlb.release : '—') + '</b>（模型 ' + (rlb ? rlb.modelVersion : '—') + '）· 本体 <b>' + (d.ontVersion || '—') + '</b> 快照';
-  h += '<div class="onto-head"><span class="onto-badge">本体类型 · ' + esc(cls.instanceOf || cls.jobTypeName) + '<span class="conf">置信 ' + (cls.confidence || '—') + '</span></span><span class="onto-stats">' + stats + '</span></div>';
+  // 锚定对象（workspace-anchor 现场派生）：当前锚定的对象是什么 + ObjectType + 直接关系
+  const an = d.anchored && d.anchored.ok ? d.anchored : null;
+  const anchoredBadge = an
+    ? '锚定对象 · ' + esc(an.objectType.typeName) + '（' + esc(an.objectType.type) + '） · ' + esc(an.anchored.name)
+    : '未锚定对象（请先在左侧切换模型/作业目录锚点）';
+  h += '<div class="onto-head"><span class="onto-badge">' + anchoredBadge + '<span class="conf">' + esc(cls.instanceOf || cls.jobTypeName) + ' · 置信 ' + (cls.confidence || '—') + '</span></span><span class="onto-stats">' + stats + '</span></div>';
+  if (an) {
+    const relChips = (an.relations || []).map(function (r) {
+      return '<span class="tlabel" style="margin-right:6px">' + esc(r.link + ' · ' + r.count) + '</span>';
+    }).join('');
+    h += '<div class="note">识别依据：' + esc(an.why || '') + '</div><div style="margin-top:6px">' + relChips + '</div>';
+  }
+  // —— 本体图 · 现场派生（建模空间 + 代码仓）：呈现「本体」本身，而非仅分类/规则的工具输出 ——
+  if (d.context && d.context.center) {
+    const cx = d.context, nBy = {};
+    cx.nodes.forEach(function (n) { (nBy[n.type] = nBy[n.type] || []).push(n); });
+    const chip = function (t, label, sub, hl) {
+      return '<div class="lnk-node' + (hl ? ' hit' : '') + '"><div class="lnk-t">' + esc(t) + '</div><div class="lnk-n">' + esc(label) + '</div>' + (sub ? '<div class="lnk-d">' + esc(sub) + '</div>' : '') + '</div>';
+    };
+    const jobN = cx.nodes[0];
+    const dirN = nBy['Directory'] || [];
+    const jtN = nBy['JobType'] || [];
+    const modelN = nBy['Model'] || [];
+    const fldN = nBy['Field'] || [];
+    const sibN = cx.edges.filter(function (e) { return e.type === 'implements' && e.from !== cx.center; })
+      .map(function (e) { return cx.nodes.find(function (n) { return n.id === e.from; }); }).filter(Boolean);
+    const edge = function (b) { return '<div class="lnk-edge"><b>' + esc(b) + '</b><i>→</i></div>'; };
+    h += '<div class="tlabel" style="margin:14px 0 8px">本体图 · ' + esc(cx.derivedFrom || '现场派生')
+      + ' <span class="tlabel">锚定当前作业在本体中的位置（建模空间 + 代码仓实时投影）</span></div><div class="lnk-wrap">';
+    h += '<div class="lnk-col">' + (dirN[0] ? chip('Directory', dirN[0].name, dirN[0].id.split('/').slice(1).join('/')) : chip('Directory', '—', '未锚定作业目录')) + '</div>';
+    h += edge('inDirectory');
+    h += '<div class="lnk-col">' + chip('Job · 作业', cx.center.split('/').pop(), jobN && jobN.name, true) + '</div>';
+    h += edge('instanceOf');
+    h += '<div class="lnk-col">' + (jtN[0] ? chip('JobType', jtN[0].name, jtN[0].id) : chip('JobType', '—', '未分类')) + '</div>';
+    h += edge('implements');
+    if (modelN[0]) {
+      const fm = modelN[0];
+      const fldChips = fldN.map(function (f) {
+        const b = cx.edges.find(function (x) { return x.from === f.id && x.type === 'binds'; });
+        const bs = b ? cx.nodes.find(function (n) { return n.id === b.to; }) : null;
+        return chip('Field · ' + (f.datatype || ''), f.name, (b && bs) ? '绑定标准 ' + bs.name : (b ? '绑定标准' : '未绑定标准'));
+      }).join('');
+      h += '<div class="lnk-col">' + chip('Model · 模型', fm.name, fm.datatype || fm.physicalTable || fm.id, true)
+        + (fldChips ? '<div class="lnk-inh">↓ hasField</div>' + fldChips : '<div class="lnk-inh">（无字段）</div>') + '</div>';
+    } else {
+      h += '<div class="lnk-col">' + chip('Model', '未匹配', '当前作业未建模（无 implements 边）') + '</div>';
+    }
+    h += '</div>';
+    if (sibN.length) {
+      h += '<div class="tlabel" style="margin:10px 0 4px">🌐 实现同一模型的其他作业 · 现场派生（影响面 ' + sibN.length + '）</div><div class="lnk-wrap">'
+        + sibN.map(function (n) { return '<div class="lnk-node rl"><div class="lnk-t">Job · 作业</div><div class="lnk-n">' + esc(n.name || n.path) + '</div></div>'; }).join('') + '</div>';
+    }
+  }
   // 链路图（Job → instanceOf → JobType 继承 → appliesTo → 策略 → containsRule → 规则）
   const polNodes = pol.map(function (p) { return '<div class="lnk-node pol"><div class="lnk-n">' + esc(p.name) + '</div><div class="lnk-d">' + esc(p.goal || '') + '</div></div>' }).join('');
   const ruleNodes = (rl && rl.rules ? rl.rules.slice(0, 5) : []).map(function (r) { return '<div class="lnk-node rl"><div class="lnk-n">' + esc(r.name) + '</div><div class="lnk-d">' + esc(r.severity) + ' · ' + esc(r.stage) + ' · impl ' + (r.impl ? esc(r.impl.ruleset) : '无') + '</div></div>' }).join('');
@@ -870,6 +922,16 @@ async function viewScriptScan(f) {
   h += '<div class="lnk-edge"><b>containsRule</b><i>→</i><span>③ 规则</span></div>';
   h += '<div class="lnk-col">' + ruleNodes + (rl && rl.ruleCount > 5 ? '<div class="lnk-node"><div class="lnk-d">… 共 ' + rl.ruleCount + ' 条 · 本体 ' + (d.ontVersion || '') + '</div></div>' : '') + '</div>';
   h += '</div>';
+  // 扫描计划：要扫哪些规则、怎么扫（RuleImpl.engine → 执行器）
+  if (plan && plan.scanRules && plan.scanRules.length) {
+    h += '<div class="tlabel" style="margin:14px 0 8px">扫描计划 · 要扫哪些规则、怎么扫（RuleImpl.engine → 执行器）</div>';
+    h += '<div class="lnk-wrap">' + plan.scanRules.map(function (r) {
+      return '<div class="lnk-node rl"><div class="lnk-n">' + esc(r.name) + '</div><div class="lnk-d">' + esc(r.severity + ' · ' + (r.impl ? r.impl.ruleset : '—')) + '</div></div>';
+    }).join('') + '</div>';
+    h += '<div class="note">' + esc(plan.howToScan || '') + '</div>';
+  } else if (plan) {
+    h += '<div class="tlabel" style="margin:14px 0 8px">扫描计划 · 要扫哪些规则、怎么扫</div><p class="note">' + esc(plan.howToScan || '无可执行规则（无 RuleImpl）') + '</p>';
+  }
   // 解析轨迹（折叠列表）
   h += '<div class="tlabel" style="margin:14px 0 8px">处理过程 · 解析轨迹（Resolution Trace）——查了什么本体、怎么找到规则、排除了什么</div>';
   trace.forEach(function (t) {

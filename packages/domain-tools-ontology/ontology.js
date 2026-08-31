@@ -1,11 +1,14 @@
 // @his/domain-tools-ontology — ontology.js：数据开发本体的语义层（五原语之 Object + Link）
 //
 // 定位（Palantir Ontology 范式）：本体 = 语义层（Object/Link）+ 动力学层（Action/Function）。
-// 本文件只承载「语义层」——对象类型 schema、关系类型 schema、以及演示实例图（对象 + 关系）。
-// Action（写操作）/ Function（只读计算）在 definitions.js 归位，扫描执行在 domain-tools-dev（引擎层）。
+// 本文件拆成两层：
+//   DEFINITION（语义层·定义型，固定）：PlatformInstance/JobType/Policy/Rule/RuleImpl + 治理关系
+//   buildReferenceGraph（引用层·投影型，现场派生）：从 建模空间(hisModeling)+代码仓(hisRepo) 投影
+//     Model/Field/DataStandard/ModelVersion/Job/Directory + implements/instanceOf/inDirectory/hasField 等关系
+//   buildGraph(repo, modeling) = DEFINITION + buildReferenceGraph 合并后的完整图（供 provider 推理）
 // 规则（Policy/Rule/RuleImpl）是普通 Object Type + Link，不是独立原语。
 
-// ---------- 对象类型 schema（有哪些对象类型、各有哪些属性） ----------
+// ---------- 对象类型 schema ----------
 export const OBJECT_TYPES = {
   Model:           { props: ['name', 'physicalTable', 'domain', 'layer', 'version', 'published'] },
   Field:           { props: ['name', 'type', 'comment', 'std'] },
@@ -21,7 +24,7 @@ export const OBJECT_TYPES = {
   Release:         { props: ['release', 'commit', 'modelVersion'] },
 }
 
-// ---------- 关系类型 schema（有哪些关系、source/target 对象类型） ----------
+// ---------- 关系类型 schema ----------
 export const LINK_TYPES = {
   implements:      { from: 'Job', to: 'Model' },
   hasField:        { from: 'Model', to: 'Field' },
@@ -38,23 +41,21 @@ export const LINK_TYPES = {
   bindsJobType:    { from: 'RuleImpl', to: 'JobType' },
 }
 
-// ---------- 演示实例图（对齐 dbscript/alter_dwd_tax_payment_v4.sql 场景 + 多平台实例） ----------
-export const GRAPH = {
+// ---------- 语义层 · 定义型（固定） ----------
+export const DEFINITION = {
   objects: {
-    // 平台实例
     'inst/dbscript':  { type: 'PlatformInstance', name: '数据库脚本平台', style: '高代码', engine: 'sql-scanner' },
     'inst/flashsync': { type: 'PlatformInstance', name: 'FlashSync', style: '低代码', engine: 'flashsync-parser' },
     'inst/bds':       { type: 'PlatformInstance', name: 'BDS', style: '高代码', engine: 'bds-parser' },
-    // 作业类型
-    'jt/schema-change':      { type: 'JobType', name: '表结构变更', instance: 'inst/dbscript' },
-    'jt/transfer':           { type: 'JobType', name: '传输任务', instance: 'inst/flashsync' },
-    'jt/process-flashsync':  { type: 'JobType', name: '加工任务', instance: 'inst/flashsync' },
-    'jt/process-bds':        { type: 'JobType', name: '加工任务', instance: 'inst/bds' },
-    // 作业 / 模型 / 目录
-    'job/alter-dwd-tax-payment-v4': { type: 'Job', path: 'dbscript/alter_dwd_tax_payment_v4.sql', engine: 'Hive SQL', targetTable: 'dwd_tax_payment' },
-    'model/M-1024': { type: 'Model', name: 'dwd_tax_payment', physicalTable: 'dwd_tax_payment', version: 'v4' },
-    'dir/dbscript': { type: 'Directory', path: 'dbscript' },
-    // 治理对象（普通 Object Type）
+    'inst/schedule':  { type: 'PlatformInstance', name: '数据调度平台', style: '—', engine: 'sched' },
+    'inst/svc':       { type: 'PlatformInstance', name: '数据服务平台', style: '—', engine: 'svc' },
+    'jt/schema-change':     { type: 'JobType', name: '表结构变更', instance: 'inst/dbscript' },
+    'jt/transfer':          { type: 'JobType', name: '传输任务', instance: 'inst/flashsync' },
+    'jt/process-flashsync': { type: 'JobType', name: '加工任务', instance: 'inst/flashsync' },
+    'jt/process-bds':       { type: 'JobType', name: '加工任务', instance: 'inst/bds' },
+    'jt/schedule':          { type: 'JobType', name: '调度作业', instance: 'inst/schedule' },
+    'jt/svc':               { type: 'JobType', name: '数据服务', instance: 'inst/svc' },
+    'jt/ops':               { type: 'JobType', name: '运维编排', instance: 'inst/schedule' },
     'pol/design-consistency': { type: 'Policy', name: '设计开发一致性', goal: '设计态↔开发态对齐' },
     'pol/script-quality':     { type: 'Policy', name: '脚本质量规范', goal: '脚本编制质量' },
     'pol/sql-safety':         { type: 'Policy', name: 'SQL 安全规范', goal: '高危/安全红线' },
@@ -66,19 +67,14 @@ export const GRAPH = {
     'impl/se-sql-1.8':      { type: 'RuleImpl', engine: 'sql-scanner', ruleset: 'se-sql 1.8', jobType: 'jt/schema-change' },
     'impl/fs-transfer-2.1': { type: 'RuleImpl', engine: 'flashsync-parser', ruleset: 'fs-transfer 2.1', jobType: 'jt/transfer' },
     'impl/bds-etl-3.0':     { type: 'RuleImpl', engine: 'bds-parser', ruleset: 'bds-etl 3.0', jobType: 'jt/process-bds' },
-    // 引用层
-    'rel/REL-0820': { type: 'Release', release: 'REL-0820', commit: 'b7d2f91', modelVersion: 'v3' },
   },
   links: [
-    // 分类 / 归属
-    { type: 'instanceOf', from: 'job/alter-dwd-tax-payment-v4', to: 'jt/schema-change' },
     { type: 'hasJobType', from: 'inst/dbscript', to: 'jt/schema-change' },
     { type: 'hasJobType', from: 'inst/flashsync', to: 'jt/transfer' },
     { type: 'hasJobType', from: 'inst/flashsync', to: 'jt/process-flashsync' },
     { type: 'hasJobType', from: 'inst/bds', to: 'jt/process-bds' },
-    { type: 'implements', from: 'job/alter-dwd-tax-payment-v4', to: 'model/M-1024' },
-    { type: 'inDirectory', from: 'job/alter-dwd-tax-payment-v4', to: 'dir/dbscript' },
-    // 治理关系（Policy/Rule/RuleImpl 作为普通对象关联）
+    { type: 'hasJobType', from: 'inst/schedule', to: 'jt/schedule' },
+    { type: 'hasJobType', from: 'inst/svc', to: 'jt/svc' },
     { type: 'containsRule', from: 'pol/design-consistency', to: 'rule/rc@dbscript-field-type' },
     { type: 'containsRule', from: 'pol/design-consistency', to: 'rule/rc@dbscript-table' },
     { type: 'containsRule', from: 'pol/design-consistency', to: 'rule/rc@dbscript-field-missing' },
@@ -99,21 +95,85 @@ export const GRAPH = {
     { type: 'bindsJobType', from: 'impl/se-sql-1.8', to: 'jt/schema-change' },
     { type: 'bindsJobType', from: 'impl/fs-transfer-2.1', to: 'jt/transfer' },
     { type: 'bindsJobType', from: 'impl/bds-etl-3.0', to: 'jt/process-bds' },
-    // 引用层基线
-    { type: 'releaseBaseline', from: 'rel/REL-0820', to: 'job/alter-dwd-tax-payment-v4' },
   ],
 }
 
-// ---------- 图遍历辅助 ----------
-// 沿某关系类型，取 from 对象的相邻对象 id（正向）；reverse=true 取反向（指向 from 的对象）
-export function traverse(graph, fromId, linkType, { reverse = false } = {}) {
-  const g = graph || GRAPH
-  return g.links
-    .filter((l) => l.type === linkType && (reverse ? l.to === fromId : l.from === fromId))
-    .map((l) => (reverse ? l.from : l.to))
+// ---------- 引用层 · 投影型（现场派生） ----------
+export function extractTable(text) {
+  if (!text) return null
+  const m = text.match(/INSERT\s+(OVERWRITE|INTO)\s+TABLE\s+([\w.]+)/i) || text.match(/ALTER\s+TABLE\s+(\S+)/i) || text.match(/FROM\s+([\w.]+)/i)
+  return m ? m[m.length - 1].split('.').pop() : null
 }
-// 取对象实例（含类型）
+export function extractEngine(text) {
+  return (text && text.match(/--\s*@engine:\s*(\S+)/))?.[1] ?? null
+}
+export function inferJobType(path) {
+  const d = (path || '').split('/')[0]
+  if (d === 'dbscript') return 'jt/schema-change'
+  if (d.startsWith('etl/ods')) return 'jt/transfer'
+  if (d.startsWith('etl')) return 'jt/process-bds'
+  if (d === 'dag') return 'jt/schedule'
+  if (d === 'svc') return 'jt/svc'
+  if (d === 'ops') return 'jt/ops'
+  return null
+}
+
+/** 引用层投影：从建模空间 + 代码仓 现场派生 Model/Field/Job 等 + 关系 */
+export function buildReferenceGraph(repo, modeling) {
+  const objects = {}
+  const links = []
+  const branch = repo.currentBranch()
+  const models = modeling?._state?.models ? Object.values(modeling._state.models) : []
+  for (const m of models) {
+    const mid = 'model/' + m.file
+    objects[mid] = { type: 'Model', name: m.name, physicalTable: m.name, domain: m.domain, layer: m.layer, version: m.version, published: m.published }
+    const vid = mid + '@v' + m.version
+    objects[vid] = { type: 'ModelVersion', version: m.version, summary: '模型 ' + m.name, release: null }
+    links.push({ type: 'hasVersion', from: mid, to: vid })
+    for (const f of m.fields || []) {
+      const fid = mid + '/field/' + f.n
+      objects[fid] = { type: 'Field', name: f.n, datatype: f.t, comment: f.c, std: f.std }
+      links.push({ type: 'hasField', from: mid, to: fid })
+      if (f.std) {
+        const sid = 'std/' + f.std
+        objects[sid] = objects[sid] || { type: 'DataStandard', code: f.std }
+        links.push({ type: 'binds', from: fid, to: sid })
+      }
+    }
+  }
+  // 目录树用 treeWithState（已提交 + 未提交覆盖）：dbscript/svc 这类未提交的新作业也必须投影进本体，
+  // 否则「当前锚定的对象」在未提交态下会显示为空目录（扫描语义是工作区现场，不是只看已提交视图）
+  const tree = repo.treeWithState ? repo.treeWithState(branch) : (repo.tree ? repo.tree(branch) : [])
+  for (const e of tree) {
+    if (!['etl', 'script', 'dag', 'svc', 'ops'].includes(e.kind)) continue
+    const text = repo.readCommitted(branch, e.path) ?? repo.readWorking(e.path)
+    const jobId = 'job/' + e.path
+    objects[jobId] = { type: 'Job', path: e.path, engine: extractEngine(text) || 'Hive SQL', targetTable: extractTable(text) }
+    const dir = e.path.split('/').slice(0, -1).join('/')
+    const dirId = 'dir/' + dir
+    if (!objects[dirId]) objects[dirId] = { type: 'Directory', path: dir }
+    links.push({ type: 'inDirectory', from: jobId, to: dirId })
+    const jtId = inferJobType(e.path)
+    if (jtId) links.push({ type: 'instanceOf', from: jobId, to: jtId })
+    const ttail = objects[jobId].targetTable
+    const model = models.find((m) => m.name === ttail)
+    if (model) links.push({ type: 'implements', from: jobId, to: 'model/' + model.file })
+  }
+  return { objects, links }
+}
+
+/** 完整图 = 语义层定义 + 引用层投影 */
+export function buildGraph(repo, modeling) {
+  const ref = buildReferenceGraph(repo, modeling)
+  return { objects: { ...DEFINITION.objects, ...ref.objects }, links: [...DEFINITION.links, ...ref.links] }
+}
+
+// ---------- 图遍历 ----------
+export function traverse(graph, fromId, linkType, { reverse = false } = {}) {
+  const g = graph || DEFINITION
+  return g.links.filter((l) => l.type === linkType && (reverse ? l.to === fromId : l.from === fromId)).map((l) => (reverse ? l.from : l.to))
+}
 export function getObject(graph, id) {
-  const g = graph || GRAPH
+  const g = graph || DEFINITION
   return g.objects[id] ? { id, ...g.objects[id] } : null
 }
