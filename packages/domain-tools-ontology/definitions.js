@@ -46,7 +46,7 @@ export function buildDefinitions(p, { repo } = {}) {
     },
     {
       name: 'ontology_consistency_check', risk: 'read',
-      description: '【Function · 一致性检查 · 编排入口】作业与模型版本区间对账（Job →implements→ Model；Release →releaseBaseline→ Job）：返回四态 MATCH/AHEAD/BEHIND/DIVERGE 与字段级冲突。扫描执行在引擎层，本函数只编排本体规则 + 引用层事实',
+      description: '【Function · 一致性对账】「设计态 ↔ 开发态」对齐检查：作业与模型版本区间对账（Job →implements→ Model；Release →releaseBaseline→ Job），返回四态 MATCH/AHEAD/BEHIND/DIVERGE 与字段级冲突。注意：这是设计→模型一致性对账，不是规范性/高危质量检查（那些用 code_lint / danger_scan / partition_check）；用户问「SQL 有哪些质量问题」请走质量检查工具。扫描执行在引擎层，本函数只编排本体规则 + 引用层事实',
       parameters: { type: 'object', properties: { path: S('string', { description: '作业路径' }) }, required: ['path'] },
       output: jsonOut,
       execute: (args) => {

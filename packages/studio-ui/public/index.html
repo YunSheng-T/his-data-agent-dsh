@@ -1261,7 +1261,7 @@ async function send(text, silent) {
   poll();
 }
 $('#send').addEventListener('click', () => send());
-$('#prompt').addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) send(); });
+$('#prompt').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
 async function poll() {
   if (!sessionId) return;
   const d = await api(`/api/sessions/${sessionId}/events?after=${lastSeq}`);

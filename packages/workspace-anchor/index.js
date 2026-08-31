@@ -88,7 +88,7 @@ export function apply(ctx) {
         const exists = repo.branches().includes(args.branch)
         const actual = repo.checkout(args.branch, { create: !exists })
         const dir = args.dir ?? null
-        if (dir && !/^(etl|dag|ops)(\/[a-z0-9_-]+)*$/i.test(dir)) throw new Error(`非法作业目录: ${dir}（只接受 etl/*、dag 或 ops）`)
+        if (dir && !/^(etl|dag|ops|dbscript|svc)(\/[a-z0-9_-]+)*$/i.test(dir)) throw new Error(`非法作业目录: ${dir}（只接受 etl/*、dag、ops、dbscript、svc）`)
         current = { kind: 'repo', branch: actual, dir, key: `repo:${actual}:${dir ?? ''}@${repo.isClean() ? 'clean' : 'dirty'}`, at: new Date().toISOString() }
         console.error(`[anchor] 锚定 -> ${current.key}${exists ? '' : '（新建分支）'}`)
         const stale = staleJobs(ctx, repo, actual)
