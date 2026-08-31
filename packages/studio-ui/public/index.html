@@ -394,18 +394,30 @@ const api = (p, o) => fetch(p, o).then((r) => r.json());
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 // 本体对象类型作用域查询工具：工具名是 snake_case（LLM schema 不允许点号），
 // 显示时转回 ObjectType.method(arg) 形式 —— 会话流打印出 Policy.getPolicies(inst/dbscript)。
+// 本体对象类型作用域查询工具：工具名是 snake_case（LLM schema 不允许点号），
+// 显示时转回 ObjectType.method(arg) 形式 —— 会话流打印出 Policy.getPolicies(inst/dbscript)。
 const ONTO_Q = {
-  ontology_policy_get_policies: ['Policy', 'getPolicies'],
-  ontology_policy_get_rules: ['Policy', 'getRules'],
-  ontology_rule_get_implementations: ['Rule', 'getImplementations'],
-  ontology_platform_get_policies: ['PlatformInstance', 'getPolicies'],
-  ontology_platform_get_rules: ['PlatformInstance', 'getRules'],
-  ontology_platform_get_job_types: ['PlatformInstance', 'getJobTypes'],
-  ontology_job_type_get_platform: ['JobType', 'getPlatform'],
-  ontology_rule_impl_get_job_type: ['RuleImpl', 'getJobType'],
-  ontology_model_get_fields: ['Model', 'getFields'],
-  ontology_model_get_implementing_jobs: ['Model', 'getImplementingJobs'],
+  policy_get_policies: ['Policy', 'getPolicies'],
+  policy_get_rules: ['Policy', 'getRules'],
+  rule_get_implementations: ['Rule', 'getImplementations'],
+  platform_get_policies: ['PlatformInstance', 'getPolicies'],
+  platform_get_rules: ['PlatformInstance', 'getRules'],
+  platform_get_job_types: ['PlatformInstance', 'getJobTypes'],
+  job_type_get_platform: ['JobType', 'getPlatform'],
+  rule_impl_get_job_type: ['RuleImpl', 'getJobType'],
+  model_get_fields: ['Model', 'getFields'],
+  model_get_jobs: ['Model', 'getImplementingJobs'],
 };
+// 本体 Function 工具白名单（无 ontology_ 前缀，用名单标记 [ontology-function] 徽标）
+const ONTO_TOOLS = new Set([
+  'get_anchored_object', 'get_object_type', 'get_links',
+  'policy_get_policies', 'policy_get_rules', 'rule_get_implementations',
+  'platform_get_policies', 'platform_get_rules', 'platform_get_job_types',
+  'job_type_get_platform', 'rule_impl_get_job_type', 'model_get_fields', 'model_get_jobs',
+  'list_functions', 'list_actions', 'classify_job', 'policies_for', 'rules_for',
+  'get_scan_plan', 'check_consistency', 'get_lineage_upstream', 'get_lineage_downstream',
+  'get_impact', 'explain_finding', 'propose',
+]);
 function ontoToolLabel(name, argsObj) {
   const m = ONTO_Q[name];
   const argVal = argsObj && (argsObj.platform || argsObj.policy || argsObj.rule || argsObj.impl || argsObj.jobType || argsObj.model || '');
@@ -1231,11 +1243,10 @@ function renderEvents(events) {
       if (busy) showThinking('模型生成中');
     } else if (e.type === 'tool/call') {
       showThinking(`调用工具 ${d.name}`);
-      const isOnto = d.name.startsWith('ontology_');
+      const isOnto = ONTO_TOOLS.has(d.name);
       let argObj = {}; try { argObj = typeof d.arguments === 'string' ? JSON.parse(d.arguments || '{}') : (d.arguments ?? {}); } catch {}
       const label = ontoToolLabel(d.name, argObj);
       const argTxt = Object.keys(argObj).length ? JSON.stringify(argObj) : '';
-      const isOntoQ = d.name.startsWith('ontology_policy') || d.name.startsWith('ontology_rule') || d.name.startsWith('ontology_platform') || d.name.startsWith('ontology_job_type') || d.name.startsWith('ontology_rule_impl') || d.name.startsWith('ontology_model');
       pendingTermLines.push([`${isOnto ? '$ ⬢ [ontology-function]' : '$'} ${label} ${argTxt}`]);
     } else if (e.type === 'tool/code-dispatch') {
       showThinking(`工具 ${d.name}`);

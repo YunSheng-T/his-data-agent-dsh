@@ -317,7 +317,7 @@ export const provider = {
         ],
         jobTypes: jobTypeIds.map((id) => { const o = getObject(graph, id); return { id, name: o.name } }),
         why,
-        note: '模型锚点：沿 implements(逆向) 找到实现作业 → instanceOf 作业类型 → covers/appliesTo 找策略与规则；要扫哪些规则、怎么扫用 ontology_scan_plan',
+        note: '模型锚点：沿 implements(逆向) 找到实现作业 → instanceOf 作业类型 → covers/appliesTo 找策略与规则；要扫哪些规则、怎么扫用 get_scan_plan',
       }
     }
     // 代码仓锚点（分支 / 分支+目录）
@@ -342,7 +342,7 @@ export const provider = {
       jobs: jobs.map((j) => j.path),
       jobTypes: jobTypeIds.map((id) => { const o = getObject(graph, id); return { id, name: o.name } }),
       why,
-      note: dir ? '目录锚点：沿 instanceOf 到作业类型后，用 ontology_policies_for / ontology_rules_for 取策略与规则' : '分支锚点：请锚定到具体作业目录（workspace_anchor 传 branch+dir）做对象级推理',
+      note: dir ? '目录锚点：沿 instanceOf 到作业类型后，用 policies_for / rules_for 取策略与规则' : '分支锚点：请锚定到具体作业目录（workspace_anchor 传 branch+dir）做对象级推理',
     }
   },
 
@@ -392,7 +392,7 @@ export const provider = {
       jobType: jobTypeId, instance: rl.instanceName,
       scanRules: rules.map((r) => ({ id: r.id, name: r.name, severity: r.severity, impl: r.impl })),
       engines,
-      howToScan: '由 RuleImpl.engine 执行：' + (engines.join(' / ') || '—') + '。一致性对账走 ontology_consistency_check（Job →implements→ Model 版本区间对账）；规范性/高危走 code_lint / danger_scan / partition_check。规则只声明，执行在引擎。',
+      howToScan: '由 RuleImpl.engine 执行：' + (engines.join(' / ') || '—') + '。一致性对账走 check_consistency（Job →implements→ Model 版本区间对账）；规范性/高危走 code_lint / danger_scan / partition_check。规则只声明，执行在引擎。',
     }
   },
 
