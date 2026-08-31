@@ -11,12 +11,12 @@ import { buildGraph, DEFINITION, traverse, getObject, extractTable, extractEngin
 
 // ---------- 实例层（运行产物，回挂本体节点） ----------
 export const FINDINGS = {
-  'F-101': { id: 'F-101', rule: 'rule/rc@dbscript-field-type', severity: '告警 · 可修复', target: 'tax_rate', desc: '设计 v4 定义为 DECIMAL(10,4)，代码写成 DOUBLE——金额/税率类字段浮点会丢精度，建议按设计口径修复。', chain: 'R-102 字段类型一致性 ← 设计开发一致性策略 ← 数据库脚本平台 · 表结构变更 ← 作业分类信号 ｜ 匹配事实：区间 v3→v4 · 本体 v47', fix: { column: 'tax_rate', from: 'DOUBLE', to: 'DECIMAL(10,4)' } },
-  'F-102': { id: 'F-102', rule: 'rule/rc@dbscript-field-missing', severity: 'BEHIND · 提示不阻断', target: 'pay_fee', desc: '允许分批实现：该设计增量已列入「待开发事项」，不阻断本次提交。', chain: 'R-103 字段缺失/多余 ← 设计开发一致性策略 ← 数据库脚本平台 · 表结构变更 ｜ 区间 v3→v4 · 本体 v47' },
+  'F-101': { id: 'F-101', rule: 'rule/rc@dbscript-field-type', severity: '告警 · 可修复', target: 'tax_rate', desc: '设计 v4 定义为 DECIMAL(10,4)，代码写成 DOUBLE——金额/税率类字段浮点会丢精度，建议按设计口径修复。', chain: 'R-102 字段类型一致性 ← 设计开发一致性策略 ← 数据库脚本平台 · DDL ← 作业分类信号 ｜ 匹配事实：区间 v3→v4 · 本体 v47', fix: { column: 'tax_rate', from: 'DOUBLE', to: 'DECIMAL(10,4)' } },
+  'F-102': { id: 'F-102', rule: 'rule/rc@dbscript-field-missing', severity: 'BEHIND · 提示不阻断', target: 'pay_fee', desc: '允许分批实现：该设计增量已列入「待开发事项」，不阻断本次提交。', chain: 'R-103 字段缺失/多余 ← 设计开发一致性策略 ← 数据库脚本平台 · DDL ｜ 区间 v3→v4 · 本体 v47' },
 }
 
 export const RESOLUTION_TRACE = [
-  { seg: 'classify', title: '① 作业分类', stat: 'Job →instanceOf→ JobType（特征推理）', hits: [{ signal: '目录', value: 'dbscript', hit: '数据库脚本平台' }, { signal: 'AST', value: 'ALTER TABLE … ADD COLUMNS', hit: '表结构变更', note: '置信 0.98' }], excluded: ['DML（无 UPDATE/INSERT）', '数据服务（svc）'] },
+  { seg: 'classify', title: '① 作业分类', stat: 'Job →instanceOf→ JobType（特征推理）', hits: [{ signal: '目录', value: 'dbscript', hit: '数据库脚本平台' }, { signal: 'AST', value: 'ALTER TABLE … ADD COLUMNS', hit: 'DDL', note: '置信 0.98' }], excluded: ['DML（无 UPDATE/INSERT）', '数据服务（svc）'] },
   { seg: 'policy', title: '② 策略解析', stat: 'JobType → PlatformInstance →covers→ Policy', hits: [{ policy: 'design-consistency', note: '← 设计开发一致性（跨平台）' }, { policy: 'script-quality', note: '← 脚本质量规范' }, { policy: 'sql-safety', note: '← SQL 安全规范' }], excluded: [] },
   { seg: 'rules', title: '③ 规则装配', stat: 'PlatformInstance →appliesTo→ Rule →implementedBy→ RuleImpl', hits: [{ rule: 'rc@dbscript-field-type', note: '· 字段类型一致性 · 告警 · impl se-sql 1.8' }, { rule: 'rc@dbscript-table', note: '· 表模型一致性 · 阻断' }], excluded: [] },
   { seg: 'incr', title: '④ 一致性前置', stat: 'Job →implements→ Model；Release →releaseBaseline→ Job', hits: [{ item: '目标物理表', value: 'dwd_tax_payment', note: '→ 模型匹配' }, { item: '基线', value: 'REL-0820', note: '→ 模型 v3' }], excluded: [] },
@@ -347,7 +347,8 @@ export const provider = {
   },
 
   // Function：本体推理链（锚定对象 → ObjectType → 关系遍历 → Platform/Policy/Rule → 扫描计划）
-  // 产出「一条推理链路」的节点/边，供 UI 用 X6 渲染（对齐 ER 图容器），也让 Agent 能看到每条边从哪来
+  // 产出「一条推理链路」的节点/边，供 UI 用 X6 渲染。边按【推理方向】画（左→右单向），
+  // 不再画 appliesTo(逆向)/bindsJobType 这类回边——那会造成线反复交叉。回边只在 label 上以「(逆向)」标注。
   reasonChain(ctx = {}, path) {
     const graph = buildGraph(ctx.repo, ctx.modeling)
     const anchor = this.anchoredObject(ctx)
@@ -357,30 +358,28 @@ export const provider = {
     const rl = this.rulesFor(cls.jobType)
     const nodes = [], edges = []
     const N = (id, type, name, extra = {}) => nodes.push({ id, type, name, ...extra })
-    const E = (type, from, to, label = type) => edges.push({ type, from, to, label, dir: label === type ? '→' : label })
+    const E = (type, from, to, label) => edges.push({ type, from, to, label })
     const jobId = 'job/' + path
     const job = getObject(graph, jobId)
     if (job) N(jobId, 'Job', job.path.split('/').pop(), { sub: job.path })
     N(cls.jobType, 'JobType', cls.jobTypeName, { sub: cls.jobType })
     N(cls.instance, 'PlatformInstance', cls.instanceName, { sub: cls.instance })
     if (job) E('instanceOf', jobId, cls.jobType, 'instanceOf')
-    E('hasJobType', cls.instance, cls.jobType, 'hasJobType(逆向)')
+    E('hasJobType', cls.jobType, cls.instance, 'hasJobType(逆向)')
     for (const p of (pol.policies || [])) {
       N(p.id, 'Policy', p.name, { sub: p.id, goal: p.goal })
-      E('covers', p.id, cls.instance, 'covers(逆向)')
+      E('covers', cls.instance, p.id, 'covers(逆向)')
     }
     for (const r of (rl.rules || [])) {
       N(r.id, 'Rule', r.name, { sub: r.id, severity: r.severity, stage: r.stage })
       E('containsRule', r.policy, r.id, 'containsRule')
-      E('appliesTo', r.id, cls.instance, 'appliesTo(逆向)')
       if (r.impl) {
         N(r.impl.id, 'RuleImpl', r.impl.ruleset, { sub: r.impl.id, engine: r.impl.engine })
         E('implementedBy', r.id, r.impl.id, 'implementedBy')
-        E('bindsJobType', r.impl.id, cls.jobType, 'bindsJobType')
       }
     }
     const plan = this.scanPlan(cls.jobType)
-    return { ok: true, anchor: anchor.ok ? anchor : null, classify: cls, nodes, edges, policies: (pol.policies || []), rules: (rl.rules || []), plan, why: anchor.why, derivedFrom: '建模空间+代码仓现场派生 · 沿本体边逐跳' }
+    return { ok: true, anchor: anchor.ok ? anchor : null, classify: cls, nodes, edges, policies: (pol.policies || []), rules: (rl.rules || []), plan, why: anchor.why, derivedFrom: '建模空间+代码仓现场派生 · 沿本体边逐跳（推理方向单向）' }
   },
 
   // Function：扫描计划（回答「要扫哪些规则、怎么扫」：规则只声明，执行在引擎，RuleImpl.engine 指向执行器）

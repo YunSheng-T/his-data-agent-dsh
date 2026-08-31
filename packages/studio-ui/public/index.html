@@ -943,35 +943,47 @@ function renderOntoChain(chain) {
   for (const n of chain.nodes) { (cols[n.type] ??= []).push(n); }
   const pos = {};
   const RANK_ORDER = ['Job', 'JobType', 'PlatformInstance', 'Policy', 'Rule', 'RuleImpl'];
-  let cx = 30;
+  let cx = 40;
   const NODE_W = 168, NODE_H = 58;
   for (const t of RANK_ORDER) {
     const col = cols[t];
     if (!col || !col.length) continue;
-    let cy = 24;
-    for (const n of col) { pos[n.id] = { x: cx, y: cy, col: t }; cy += NODE_H + 28; }
-    cx += NODE_W + 110;
+    // 列内垂直居中：整列高度对齐到最高列，避免某列只有 1 个节点时顶部对齐导致边斜穿
+    const colH = col.length * (NODE_H + 26) - 26;
+    const maxColH = Math.max(...RANK_ORDER.map((tt) => (cols[tt] || []).length * (NODE_H + 26) - 26));
+    let cy = 30 + Math.max(0, (maxColH - colH) / 2);
+    for (const n of col) { pos[n.id] = { x: cx, y: cy, col: t }; cy += NODE_H + 26; }
+    cx += NODE_W + 130;
   }
   // 未排到的类型兜底（不应发生，防御）
   let tailX = cx;
   for (const n of chain.nodes) {
-    if (!pos[n.id]) { pos[n.id] = { x: tailX, y: 24 }; tailX += NODE_W + 110; }
+    if (!pos[n.id]) { pos[n.id] = { x: tailX, y: 30 }; tailX += NODE_W + 130; }
   }
   for (const n of chain.nodes) {
     g.addNode({ shape: 'onto-node', id: n.id, x: pos[n.id].x, y: pos[n.id].y, width: NODE_W, height: NODE_H, data: n });
   }
-  // 边：双方都在场才画（manhattan + rounded + 边标签 = 本体边名）
+  // 边：双方都在场才画。用 ports（左右侧锚点）让 fan-out 边从节点左右侧中点进出，
+  // 避免默认中心锚点导致多线在节点上汇聚重叠；边标签错开放在中点。
   const hasId = (id) => chain.nodes.some((n) => n.id === id);
+  // 统计每个源节点的出边序号，用于错开锚点（dy 偏移）防止多线重叠
+  const outCount = {};
+  for (const e of chain.edges) outCount[e.from] = (outCount[e.from] || 0) + 1;
+  const outSeen = {};
   for (const e of chain.edges) {
     if (!hasId(e.from) || !hasId(e.to)) continue;
+    const srcNode = g.getCellById(e.from), dstNode = g.getCellById(e.to);
+    const dy = (idx, n) => (n <= 1 ? 0 : (idx - (n - 1) / 2) * 18);
+    const si = outSeen[e.from] || 0; outSeen[e.from] = si + 1;
     g.addEdge({
-      source: { cell: e.from }, target: { cell: e.to },
-      router: { name: 'manhattan' }, connector: { name: 'rounded' },
-      attrs: { line: { stroke: '#6d6a64', strokeWidth: 1, targetMarker: { name: 'block', width: 7, height: 7 } } },
-      labels: [{ attrs: { label: { text: e.label, fill: '#9a6a14', fontSize: 9, fontFamily: 'JetBrains Mono, monospace' }, body: { fill: '#fbfaf6', stroke: '#e3ded3', rx: 4, ry: 4 } } }],
+      source: { cell: e.from, anchor: { name: 'midSide', args: { side: 'right', dy: dy(si, outCount[e.from]) } } },
+      target: { cell: e.to, anchor: { name: 'midSide', args: { side: 'left', dy: 0 } } },
+      router: { name: 'manhattan', args: { padding: 18 } }, connector: { name: 'rounded', args: { radius: 8 } },
+      attrs: { line: { stroke: '#6d6a64', strokeWidth: 1.1, targetMarker: { name: 'block', width: 6, height: 6 } } },
+      labels: [{ attrs: { label: { text: e.label, fill: '#9a6a14', fontSize: 9, fontFamily: 'JetBrains Mono, monospace' }, body: { fill: '#fbfaf6', stroke: '#e3ded3', rx: 4, ry: 4 } }, position: { distance: 0.5, offset: 14 } }],
     });
   }
-  g.zoomToFit({ padding: 24, maxScale: 1 });
+  g.zoomToFit({ padding: 28, maxScale: 1 });
   ontoGraph = g;
 }
 /* 血缘影响（作业级） */
@@ -1200,7 +1212,8 @@ function renderEvents(events) {
       if (busy) showThinking('模型生成中');
     } else if (e.type === 'tool/call') {
       showThinking(`调用工具 ${d.name}`);
-      pendingTermLines.push([`${d.name.startsWith('ontology_') ? '$ ⬢ [ontology-function]' : '$'} ${d.name} ${(typeof d.arguments === 'string' ? d.arguments : JSON.stringify(d.arguments ?? '')).slice(0, 120)}`]);
+      const isOnto = d.name.startsWith('ontology_') || (typeof d.name === 'string' && /^[A-Z][A-Za-z]+\./.test(d.name));
+      pendingTermLines.push([`${isOnto ? '$ ⬢ [ontology-function]' : '$'} ${d.name} ${(typeof d.arguments === 'string' ? d.arguments : JSON.stringify(d.arguments ?? '')).slice(0, 120)}`]);
     } else if (e.type === 'tool/code-dispatch') {
       showThinking(`工具 ${d.name}`);
       pendingTermLines.push([`  ↳ ${d.name}(${(typeof d.arguments === 'string' ? d.arguments : JSON.stringify(d.arguments ?? '')).slice(0, 90)})`, d.isError]);
