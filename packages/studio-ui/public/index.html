@@ -1122,7 +1122,7 @@ function renderEvents(events) {
       if (busy) showThinking('模型生成中');
     } else if (e.type === 'tool/call') {
       showThinking(`调用工具 ${d.name}`);
-      pendingTermLines.push([`$ ${d.name} ${(typeof d.arguments === 'string' ? d.arguments : JSON.stringify(d.arguments ?? '')).slice(0, 120)}`]);
+      pendingTermLines.push([`${d.name.startsWith('ontology_') ? '$ ⬢ [ontology-function]' : '$'} ${d.name} ${(typeof d.arguments === 'string' ? d.arguments : JSON.stringify(d.arguments ?? '')).slice(0, 120)}`]);
     } else if (e.type === 'tool/code-dispatch') {
       showThinking(`工具 ${d.name}`);
       pendingTermLines.push([`  ↳ ${d.name}(${(typeof d.arguments === 'string' ? d.arguments : JSON.stringify(d.arguments ?? '')).slice(0, 90)})`, d.isError]);
