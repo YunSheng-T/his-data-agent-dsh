@@ -16,6 +16,7 @@ import { randomUUID } from 'node:crypto'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { installModelSelection } from '@deepseek-ai/dsh-agent'
 import { SessionId } from '@deepseek-ai/dsh-session'
+import { scanScriptJob } from '../domain-tools-dev/definitions.js'
 import { fileURLToPath } from 'node:url'
 
 export const name = 'his-studio-ui'
@@ -248,6 +249,12 @@ async function route(ctx, req, res, url) {
     const rl = cls.ok ? onto.rulesFor(cls.jobType) : null
     const plan = cls.ok ? onto.scanPlan(cls.jobType) : null
     const match = cls.ok ? onto.consistencyCheck(p, octx) : null
+    // 扫描结论主视图：三类结论（设计质量/SQL/一致性）+ 差异明细（复用域引擎 scanScriptJob）
+    const scan = scanScriptJob(ctx.hisRepo, ctx.hisModeling, onto, p) ?? null
+    const scanVerdict = scan ? (
+      [scan.design?.pass, scan.sql?.pass, scan.consistency?.pass].some((x) => x === false) ? 'diff'
+      : [scan.design?.pass, scan.sql?.pass].every((x) => x === true) && scan.consistency?.pass === null ? 'pass-unknown' : 'pass'
+    ) : 'no-scan'
     // 发现项现场派生自一致性冲突（非写死 FINDINGS）：只对真实冲突产生 finding
     const findings = (match && match.conflicts || []).map((c, i) => ({
       id: 'F-' + (101 + i),
@@ -258,7 +265,7 @@ async function route(ctx, req, res, url) {
       chain: (c.kind === 'MATCH-CONFLICT' ? 'R-102 字段类型一致性' : 'R-103 字段缺失/多余') + ' ← 设计开发一致性策略 ← ' + (cls && cls.instanceName) + ' ｜ 基线 ' + (match.releaseBaseline && match.releaseBaseline.modelVersion || ''),
       fix: c.kind === 'MATCH-CONFLICT' ? { column: c.field, from: c.code, to: c.design } : null,
     }))
-    return json(res, 200, { path: p, anchored, chain, classify: cls, policies: pol?.policies ?? [], rules: rl ?? null, scanPlan: plan, match, findings, trace: onto.trace(), context: onto.graphContext(octx, p), ontVersion: onto.ontVersion })
+    return json(res, 200, { path: p, anchored, chain, classify: cls, policies: pol?.policies ?? [], rules: rl ?? null, scanPlan: plan, match, scan, scanVerdict, findings, trace: onto.trace(), context: onto.graphContext(octx, p), ontVersion: onto.ontVersion })
   }
   if (url.pathname === '/api/repo/lineage') {
     const p = url.searchParams.get('path')

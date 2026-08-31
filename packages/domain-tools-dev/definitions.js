@@ -97,7 +97,8 @@ export function scanOpsFile(repo, path) {
  *  与 scanEtlJob 分工：.etl 走既有设计质量/SQL/一致性；.sql(dbscript) 走本体扫描（扫什么由本体驱动）。
  *  一致性消费 matchIncrement 事实（四态 MATCH/AHEAD/BEHIND/DIVERGE），而非各自重新 diff。 */
 export function scanScriptJob(repo, modeling, onto, path) {
-  const text = repo.readCommitted(repo.currentBranch(), path)
+  // 先已提交视图，再回退工作区：未提交的新 .sql 也要能被扫描（扫描页签/提交前预扫描都基于现场态）
+  const text = repo.readCommitted(repo.currentBranch(), path) ?? repo.readWorking(path)
   if (text == null) return null
   const ast = /ADD\s+COLUMNS/i.test(text) ? { alterAddColumns: true } : /\b(UPDATE|INSERT\s+INTO)\b/i.test(text) ? { dml: true } : {}
   const engine = (text.match(/--\s*@engine:\s*(\S+)/) || [])[1] ?? 'Hive SQL'
@@ -208,10 +209,25 @@ function gatedTools({ repo, sched, modeling, cicd, onto }) {
   return [
     {
       name: 'repo_commit', risk: 'commit',
-      description: '【人工闸门 1 · 数据化审批】提交工作区全部变更到当前分支（暂存+提交一体，无单独 add 步骤）。提交即自动触发 CICD 流水线（build + 设计质量/SQL/一致性扫描），权威报告用 cicd_scan_report 查询，上线门禁以此为准。提交前必须已完成 lint 与 dry-run 验证；提交后文件才进入已提交视图（其他分支可见性按合并语义）',
-      parameters: { type: 'object', properties: { message: { type: 'string', description: '提交信息（建议含作业名与需求号）' } }, required: ['message'] },
+      description: '【人工闸门 1 · 数据化审批 · 提交前预扫描】提交工作区全部变更到当前分支（暂存+提交一体，无单独 add 步骤）。**提交前先对未提交的 .etl/.sql/.ops 跑预扫描**（设计质量/SQL/一致性），发现差异（diff）则**阻断提交**并返回扫描细节，需人工确认或修复后才能提（无副作用）。若预扫描干净才真正提交，提交后自动触发 CICD 流水线。提交前必须已完成 lint 与 dry-run 验证；提交后文件才进入已提交视图（其他分支可见性按合并语义）',
+      parameters: { type: 'object', properties: { message: { type: 'string', description: '提交信息（建议含作业名与需求号）' }, force: { type: 'boolean', description: '预扫描有 diff 时强制忽略、仍要提交（默认 false，有 diff 必须确认后再提，显式 force=true 才放行）', }, }, required: ['message'] },
       output: jsonOut,
-      execute: async ({ message }) => {
+      execute: async ({ message, force }) => {
+        // ── pre-hook：提交前先扫工作区未提交变更，有 diff 则阻断（不 commitAll，无副作用）──
+        const dirtyFiles = repo.status().filter((s) => s.state !== 'D').map((s) => s.path)
+          .filter((p) => p.endsWith('.etl') || p.endsWith('.sql') || p.endsWith('.ops'))
+        const preScan = {}
+        for (const f of dirtyFiles) {
+          const text = repo.readWorking(f)
+          if (text == null) continue
+          const s = f.endsWith('.ops') ? scanOpsFile(repo, f) : f.endsWith('.sql') ? scanScriptJob(repo, modeling, onto, f) : scanEtlJob(repo, modeling, f)
+          if (s) preScan[f] = s
+        }
+        const diffFiles = Object.entries(preScan).filter(([, s]) => scanVerdict(s) === 'diff').map(([f]) => f)
+        const diffs = diffFiles.map((f) => ({ path: f, verdict: 'diff', scan: preScan[f] }))
+        if (diffFiles.length && !force) {
+          return { gate: 'commit', blocked: true, preScan: diffs, scanned: Object.keys(preScan), note: '⚠ 提交前预扫描发现差异，已阻断提交（无副作用）。请先修复或经人工确认后，用 force=true 显式提交：' + diffFiles.join(', ') }
+        }
         const r = repo.commitAll(message)
         if (!r.committed) return { ...r, gate: 'commit', note: '无变更未产生提交' }
         // 提交即触发 CICD 流水线：对本次提交的 .etl/.ops 现场计算扫描快照（演示态本地计算，正式版走 CICD API）
@@ -221,12 +237,12 @@ function gatedTools({ repo, sched, modeling, cicd, onto }) {
           if (s) scans[f] = s
         }
         const pipeline = cicd?.trigger({ commitId: r.commitId, branch: r.branch, scans }) ?? null
-        const diffFiles = Object.entries(scans).filter(([, s]) => scanVerdict(s) === 'diff').map(([f]) => f)
+        const postDiff = Object.entries(scans).filter(([, s]) => scanVerdict(s) === 'diff').map(([f]) => f)
         return {
-          ...r, gate: 'commit',
-          pipeline: pipeline && { id: pipeline.id, ruleset: pipeline.ruleset, scanned: Object.keys(scans), verdict: diffFiles.length ? 'diff' : 'pass' },
+          ...r, gate: 'commit', preScan: diffs,
+          pipeline: pipeline && { id: pipeline.id, ruleset: pipeline.ruleset, scanned: Object.keys(scans), verdict: postDiff.length ? 'diff' : 'pass' },
           note: pipeline
-            ? `已进入已提交视图 · CICD 流水线 #${pipeline.id} 自动触发（规则集 ${pipeline.ruleset}）· 权威结论 ${diffFiles.length ? `⚠ 差异: ${diffFiles.join(', ')}` : 'PASS'}`
+            ? '已进入已提交视图 · CICD 流水线 #' + pipeline.id + ' 自动触发（规则集 ' + pipeline.ruleset + '）· 权威结论 ' + (postDiff.length ? '⚠ 差异: ' + postDiff.join(', ') : 'PASS') + ' · 提交前预扫描 ' + (diffFiles.length ? '⚠ 有差异（force 放行）' : '干净') + ''
             : '已进入已提交视图',
         }
       },

@@ -227,6 +227,28 @@ input,textarea,select{font-family:inherit}
 /* 思考块：比工具卡更弱化的折叠 */
 .a-think .f-name{color:var(--faint)}
 .a-think .f-body-text{white-space:pre-wrap;color:var(--muted);font-size:11px;line-height:1.7}
+/* 扫描结论卡片（V15.3） */
+.sv-card{border:1px solid var(--hair);border-radius:11px;margin:12px 0 4px;background:rgba(255,255,255,.6);overflow:hidden}
+.sv-card.ok{border-color:rgba(31,138,76,.5)}
+.sv-card.warn{border-color:rgba(154,106,20,.5)}
+.sv-card.err{border-color:rgba(176,42,68,.5)}
+.sv-head{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--hair-soft);background:var(--paper)}
+.sv-verdict{font-size:12.5px;font-weight:700;flex:none;padding:2px 12px;border-radius:99px}
+.sv-verdict.ok{color:var(--ok);border:1px solid rgba(31,138,76,.4)}
+.sv-verdict.warn{color:var(--warn);border:1px solid rgba(154,106,20,.4)}
+.sv-verdict.err{color:var(--err);border:1px solid rgba(176,42,68,.4)}
+.sv-text{font-size:11.5px;color:var(--muted)}
+.sv-body{padding:6px 14px}
+.sv-row{display:flex;align-items:baseline;gap:8px;padding:4px 0;font-size:11.5px;border-bottom:1px dashed var(--hair-soft)}
+.sv-row:last-child{border-bottom:none}
+.sv-st{font-family:var(--mono);flex:none;width:14px}
+.sv-st.ok{color:var(--ok)} .sv-st.err{color:var(--err)} .sv-st.dim{color:var(--faint)}
+.sv-k{font-weight:600;flex:none;width:64px;color:var(--ink)}
+.sv-n{color:var(--muted)}
+.sv-fix{padding:8px 14px;border-top:1px solid var(--hair-soft);background:rgba(154,106,20,.05)}
+.sv-fix-row{font-size:11px;color:var(--warn);padding:3px 0;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.sv-fix-action{font-family:var(--mono);font-size:10px;color:var(--ok);border:1px solid rgba(31,138,76,.4);border-radius:99px;padding:0 8px;flex:none}
+.sv-note{padding:6px 14px;font-size:10px;color:var(--faint);font-family:var(--mono);border-top:1px solid var(--hair-soft)}
 .agent-composer{flex:none;border-top:1px solid var(--hair);padding:10px 14px 12px}
 .a-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:9px}
 .a-chip{font-size:11px;color:var(--muted);border:1px solid var(--hair);border-radius:99px;padding:4px 11px}
@@ -936,6 +958,8 @@ async function viewScriptScan(f) {
     }).join('');
     h += '<div class="note">识别依据：' + esc(an.why || '') + '</div><div style="margin-top:6px">' + relChips + '</div>';
   }
+  // —— 扫描结论主视图（三态 + 差异明细）：一眼看「通过 / 有差异 / 阻断」 ——
+  h += scanVerdictHtml(d.scan, d.scanVerdict, resultFixHtml(d));
   // —— 本体推理链 · X6 图（对齐 ER 图容器）：锚定对象 → ObjectType → 沿本体边 → Platform/Policy/Rule → RuleImpl ——
   if (d.chain && d.chain.ok && d.chain.nodes && d.chain.nodes.length) {
     h += '<div class="tlabel" style="margin:14px 0 8px">本体推理链 · ' + esc(d.chain.derivedFrom || '现场派生') + '</div>';
@@ -1152,6 +1176,39 @@ function mdInline(t) {
     .replace(/`([^`]+)`/g, '<code>$1</code>')
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
 }
+/* 扫描结论主视图（V15.3）：三态 verdict + 设计质量/SQL/一致性明细 + 修复建议 */
+function scanVerdictHtml(scan, verdict, fixHtml) {
+  if (!scan) return '<p class="note">该作业暂无扫描（可能未提交或本体未挂载）。</p>';
+  const V = verdict || 'pass';
+  const conf = {
+    pass: { cls: 'ok', icon: '✓', label: '通过', text: '设计质量 / SQL / 一致性全部通过，可提交。' },
+    'pass-unknown': { cls: 'warn', icon: '~', label: '通过（一致性未知）', text: '设计/质量/SQL 通过，但一致性未匹配到模型（无基线可比）。' },
+    diff: { cls: 'err', icon: '!', label: '有差异 · 需处理', text: '存在需处理的扫描差异，提交前请先修复或人工确认。' },
+    'no-scan': { cls: 'warn', icon: '—', label: '未扫描', text: '当前文件未能生成扫描快照。' },
+  }[V] || { cls: 'warn', icon: '?', label: V, text: '' };
+  const des = scan.design, sql = scan.sql, con = scan.consistency;
+  const row = (label, pass, note, extra) => {
+    const st = pass === true ? 'ok' : pass === false ? 'err' : 'dim';
+    const sym = pass === true ? '✓' : pass === false ? '✗' : '—';
+    return '<div class="sv-row"><span class="sv-st ' + st + '">' + sym + '</span><span class="sv-k">' + esc(label) + '</span><span class="sv-n">' + esc(note || '') + '</span>' + (extra || '') + '</div>';
+  };
+  const designRows = (des && des.issues && des.issues.length ? des.issues : [])
+    .map((i) => row(i.kind === 'error' ? 'error' : 'warn', i.level !== 'error', i.message)).join('') || row('规范性', des && des.pass, des ? (des.errors ? des.errors + ' error · ' + des.warns + ' warn' : '无 issue') : '—');
+  const sqlRows = (sql && sql.dangers && sql.dangers.length ? sql.dangers : [])
+    .map((dg) => row('SQL', false, dg)).join('') || row('SQL', sql && sql.pass, sql ? (sql.dangers ? sql.dangers.join('、') : '无危险模式') : '—');
+  const conRows = (con && con.diffs && con.diffs.length ? con.diffs : [])
+    .map((dg) => row('一致性', false, dg.issue)).join('') || row('一致性', con && con.pass, con ? (con.pass === null ? con.reason : 'MATCH 完全一致') : '—');
+  return '<div class="sv-card ' + conf.cls + '"><div class="sv-head"><span class="sv-verdict ' + conf.cls + '">' + conf.icon + ' ' + esc(conf.label) + '</span><span class="sv-text">' + esc(conf.text) + '</span></div>'
+    + '<div class="sv-body">' + designRows + sqlRows + conRows + '</div>'
+    + (fixHtml ? '<div class="sv-fix">' + fixHtml + '</div>' : '')
+    + '<div class="sv-note">' + esc((scan.ontology && scan.ontology.matchStatus) ? '本体对账状态：' + scan.ontology.matchStatus : '') + '</div></div>';
+}
+function resultFixHtml(d) {
+  const fs = (d.findings || []).filter((f) => f.fix);
+  if (!fs.length) return '';
+  return fs.map((f) => '<div class="sv-fix-row"><b>' + esc(f.id) + ' · ' + esc(f.target) + '</b>：' + esc(f.desc || '') + '<span class="sv-fix-action">修复 ' + esc(f.fix.from) + '→' + esc(f.fix.to) + '</span></div>').join('');
+}
+
 function mdToHtml(src) {
   const pres = [];
   const s = String(src ?? '').replace(/```[a-zA-Z]*\n?([\s\S]*?)(?:```|$)/g, (m, code) => {
