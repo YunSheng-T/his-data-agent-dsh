@@ -214,7 +214,11 @@ input,textarea,select{font-family:inherit}
 .a-fold[open] .f-chev{transform:rotate(90deg)}
 .a-fold-body{padding:8px 10px;border-top:1px solid var(--hair-soft);font-size:11px;color:var(--muted)}
 .a-fold-body pre{margin:0;white-space:pre-wrap;word-break:break-all;font-family:var(--mono);font-size:10px;line-height:1.6;color:#3a382f}
-.a-fold-body .f-json{max-height:220px;overflow:auto;background:var(--paper);border:1px solid var(--hair-soft);border-radius:7px;padding:7px 9px}
+.a-fold-body .f-json{max-height:240px;overflow:auto;background:var(--paper);border:1px solid var(--hair-soft);border-radius:7px;padding:8px 10px;white-space:pre;font-family:var(--mono);font-size:10px;line-height:1.55;color:#3a382f}
+.a-fold-body .f-json .jk{color:#7a4dbb}
+.a-fold-body .f-json .js{color:#0a7a34}
+.a-fold-body .f-json .jn{color:#9a6a14}
+.a-fold-body .f-json .jb{color:#b02a44}
 .a-fold-body .f-err{color:var(--err)}
 .a-fold-body .f-summary{font-size:10.5px;color:var(--muted);padding-bottom:6px;font-family:var(--mono)}
 /* 步骤块：只做分组标题，不自带边框重叠 */
@@ -1231,23 +1235,17 @@ function jsonPreviewText(obj) {
   const keys = entries.slice(0, 6).map(([k, v]) => k + ': ' + (typeof v === 'object' ? (Array.isArray(v) ? '[' + v.length + ']' : '{…}') : JSON.stringify(v)));
   return keys.join(' · ') + (entries.length > 6 ? ' · …共 ' + entries.length + ' 键' : '');
 }
+// 高亮 JSON（紧凑）：把 JSON.stringify(obj, null, 2) 逐行上色，不嵌套 DOM 树
 function renderJsonTree(obj, maxDepth) {
-  const d0 = maxDepth == null ? 3 : maxDepth;
-  const escV = (v) => esc(typeof v === 'string' ? v : JSON.stringify(v));
-  const rec = (o, d) => {
-    if (o == null) return '<span class="f-err">null</span>';
-    if (typeof o !== 'object') return '<span>' + escV(o) + '</span>';
-    if (Array.isArray(o)) {
-      if (!o.length) return '<span>[]</span>';
-      if (d <= 0) return '<span>[' + o.length + ' 项]</span>';
-      return '<div class="f-json" style="margin-left:10px">' + o.map((v, i) => '<div>' + i + ': ' + rec(v, d - 1) + '</div>').join('') + '</div>';
+  const json = JSON.stringify(obj, null, 2);
+  if (json == null) return '';
+  return json.replace(/("(?:\\u[0-9a-fA-F]{4}|\\[^u]|[^\\"])*"(?:\s*:)?|\b(?:true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, (m) => {
+    if (/^"/.test(m)) {
+      const cls = /:$/.test(m) ? 'jk' : 'js';
+      return '<span class="' + cls + '">' + esc(m) + '</span>';
     }
-    const es = Object.entries(o);
-    if (!es.length) return '<span>{}</span>';
-    if (d <= 0) return '<span>{' + es.length + ' 键}</span>';
-    return '<div class="f-json" style="margin-left:10px">' + es.map(([k, v]) => '<div><b>' + esc(k) + '</b>: ' + rec(v, d - 1) + '</div>').join('') + '</div>';
-  };
-  return rec(obj, d0);
+    return /^(true|false|null)$/.test(m) ? '<span class="jb">' + m + '</span>' : '<span class="jn">' + m + '</span>';
+  });
 }
 function addMsg(cls, text, who) {
   const el = document.createElement('div');
@@ -1339,8 +1337,9 @@ function renderEvents(events) {
       const argTxt = Object.keys(argObj).length ? JSON.stringify(argObj) : '';
       const card = foldCard('tool', label, argTxt, { onto: isOnto, state: 'run' });
       card.dataset.toolName = d.name;
+      card.dataset.callId = d.callId;
       foldBodySet(card, '<div class="f-summary">调用中…</div>');
-      foldState.tools.set(d.name, card);
+      foldState.tools.set(d.callId, card);
     } else if (e.type === 'tool/code-dispatch') {
       showThinking(`工具 ${d.name}`);
       const isOnto = ONTO_TOOLS.has(d.name);
@@ -1348,8 +1347,9 @@ function renderEvents(events) {
       const label = ontoToolLabel(d.name, argObj);
       const card = foldCard('tool', label, d.isError ? '执行出错' : '', { onto: isOnto, state: d.isError ? 'err' : 'ok' });
       card.dataset.toolName = d.name;
+      card.dataset.callId = d.callId;
       foldBodySet(card, d.isError ? '<div class="f-err">' + esc(d.message || '执行失败') + '</div>' : '<div class="f-summary">已执行</div>');
-      foldState.tools.set(d.name, card);
+      foldState.tools.set(d.callId, card);
     } else if (e.type === 'tool/result') {
       showThinking('工具返回');
       for (const b of d.message?.content ?? []) {
@@ -1358,8 +1358,9 @@ function renderEvents(events) {
         let parsed = null, raw = '';
         const text = (b.content ?? []).map((c) => c.text ?? '').join('');
         try { parsed = JSON.parse(text); raw = JSON.stringify(parsed, null, 2); } catch { raw = text; }
-        let card = foldState.tools.get(d.callId || d.name);
-        if (!card) card = foldState.tools.get(d.name);
+        const callId = d.message?.source?.callId || b.toolCallId || d.callId;
+        let card = callId ? foldState.tools.get(callId) : null;
+        if (card) card.dataset.toolName = card.dataset.toolName || d.name;
         if (!card) {
           const isOnto = ONTO_TOOLS.has(d.name);
           card = foldCard('tool', d.name, '', { onto: isOnto, state: isErr ? 'err' : 'ok' });
@@ -1370,7 +1371,7 @@ function renderEvents(events) {
         const preview = parsed && typeof parsed === 'object' ? jsonPreviewText(parsed) : (raw || '').slice(0, 80);
         const sub = card.querySelector('.f-sub');
         if (sub) sub.textContent = preview;
-        foldBodySet(card, '<div class="f-summary">' + (isErr ? '⚠ 执行失败' : '✓ 返回') + (preview ? ' · ' + esc(preview) : '') + '</div>' + (isErr ? '<div class="f-err">' + esc(raw) + '</div>' : '<pre class="f-json">' + (parsed && typeof parsed === 'object' ? renderJsonTree(parsed, 3) : esc(raw)) + '</pre>'));
+        foldBodySet(card, (isErr ? '<div class="f-err">' + esc(raw || '执行失败') + '</div>' : '<pre class="f-json">' + (parsed && typeof parsed === 'object' ? renderJsonTree(parsed) : esc(raw)) + '</pre>'));
       }
     } else if (e.type === 'approval/asked') {
       showThinking('等待你确认写操作');
