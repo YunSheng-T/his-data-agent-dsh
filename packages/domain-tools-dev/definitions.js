@@ -12,10 +12,19 @@ import { scanVerdict } from './provider-cicd.js'
 const jsonOut = { schema: { type: 'object' }, render: (_a, v) => [{ type: 'text', text: JSON.stringify(v, null, 2) }] }
 const pathParam = { path: { type: 'string', description: '仓内相对路径，如 etl/dwd/dwd_tax_declaration.etl 或 dag/dwd_tax_declaration.dag' } }
 
+// 读取作业文本：view=working 读工作区；committed（默认）读已提交视图，
+// 已提交视图缺失时自动回退工作区（未提交的新作业也能被扫描），并标注实际视图
 function mustRead(repo, path, view) {
-  const text = view === 'working' ? repo.readWorking(path) : repo.readCommitted(repo.currentBranch(), path)
-  if (text == null) throw new Error(`文件不存在于${view === 'working' ? '工作区' : '当前分支已提交视图'}: ${path}`)
-  return text
+  if (view === 'working') {
+    const t = repo.readWorking(path)
+    if (t == null) throw new Error(`文件不存在于工作区: ${path}`)
+    return { text: t, view: 'working' }
+  }
+  const committed = repo.readCommitted(repo.currentBranch(), path)
+  if (committed != null) return { text: committed, view: 'committed' }
+  const working = repo.readWorking(path)
+  if (working == null) throw new Error(`文件不存在于已提交视图（且工作区也没有）: ${path}`)
+  return { text: working, view: 'working', note: '已提交视图缺失，回退扫描工作区未提交态（提交后才有流水线权威报告）' }
 }
 
 /** 作业 → 模型：@model 埋点优先，targetTable 尾名兜底（与 jobsForModel 同规则） */
@@ -84,7 +93,27 @@ export function scanOpsFile(repo, path) {
   return { design, sql, consistency }
 }
 
-export function buildDevTools({ repo, dryrun, modeling, sched, cicd }) {
+/** 本体驱动扫描（V15 @his/domain-tools-ontology）：对 .sql 脚本作业走本体分类/策略/规则/增量匹配，产出与 scanEtlJob 兼容的三类结论 + 本体事实。
+ *  与 scanEtlJob 分工：.etl 走既有设计质量/SQL/一致性；.sql(dbscript) 走本体扫描（扫什么由本体驱动）。
+ *  一致性消费 matchIncrement 事实（四态 MATCH/AHEAD/BEHIND/DIVERGE），而非各自重新 diff。 */
+export function scanScriptJob(repo, modeling, onto, path) {
+  const text = repo.readCommitted(repo.currentBranch(), path)
+  if (text == null) return null
+  const ast = /ADD\s+COLUMNS/i.test(text) ? { alterAddColumns: true } : /\b(UPDATE|INSERT\s+INTO)\b/i.test(text) ? { dml: true } : {}
+  const engine = (text.match(/--\s*@engine:\s*(\S+)/) || [])[1] ?? 'Hive SQL'
+  const physicalTable = (text.match(/ALTER\s+TABLE\s+(\S+)/i)?.[1] || (text.match(/FROM\s+(\S+)/i) || [])[1]) ?? null
+  const ctx = { repo, modeling }
+  const cls = onto ? onto.classifyJob({ path, engine, ast }, ctx) : { ok: false, note: '本体服务未挂载' }
+  const rules = cls.ok && onto ? onto.rulesFor(cls.jobType) : null
+  const match = cls.ok && onto ? onto.consistencyCheck(path, ctx) : null
+  const design = cls.ok ? { pass: true, errors: 0, warns: 0, issues: [] } : { pass: false, errors: 1, warns: 0, issues: [{ rule: 'ontology.classify', level: 'error', message: (cls.note || '本体分类失败') }] }
+  const sql = { pass: !ast.dml || ast.alterAddColumns, partition: null, dangers: ast.dml && !ast.alterAddColumns ? ['DML 订正'] : [] }
+  const conflict = match ? match.conflicts.filter((c) => c.kind === 'MATCH-CONFLICT') : []
+  const consistency = match ? { pass: conflict.length === 0, model: match.implements ? match.implements.physicalTable : null, diffs: conflict.map((c) => ({ field: c.field, issue: c.field + ' 类型冲突' })) } : { pass: null, reason: '无匹配模型/基线' }
+  return { design, sql, consistency, ontology: rules ? { jobType: cls.jobTypeName, instance: cls.instanceName, ruleCount: rules.ruleCount, impls: rules.rules.map((r) => r.impl ? r.impl.ruleset : null).filter(Boolean), matchStatus: match ? match.status : null, conflictCount: conflict.length } : null }
+}
+
+export function buildDevTools({ repo, dryrun, modeling, sched, cicd, onto }) {
   const writeTools = [
     {
       name: 'etl_codegen', risk: 'workspace-write',
@@ -170,12 +199,12 @@ export function buildDevTools({ repo, dryrun, modeling, sched, cicd }) {
   return [
     ...readTools({ repo, dryrun, modeling, cicd }),
     ...writeTools,
-    ...gatedTools({ repo, sched, modeling, cicd }),
+    ...gatedTools({ repo, sched, modeling, cicd, onto }),
   ]
 }
 
 /** gated 闸门组（P1-4 → P3 数据化）：commit 闸门挂 CICD 流水线 + 上线闸门 + 上线后的血缘回写 */
-function gatedTools({ repo, sched, modeling, cicd }) {
+function gatedTools({ repo, sched, modeling, cicd, onto }) {
   return [
     {
       name: 'repo_commit', risk: 'commit',
@@ -187,8 +216,8 @@ function gatedTools({ repo, sched, modeling, cicd }) {
         if (!r.committed) return { ...r, gate: 'commit', note: '无变更未产生提交' }
         // 提交即触发 CICD 流水线：对本次提交的 .etl/.ops 现场计算扫描快照（演示态本地计算，正式版走 CICD API）
         const scans = {}
-        for (const f of r.files.filter((x) => x.endsWith('.etl') || x.endsWith('.ops'))) {
-          const s = f.endsWith('.ops') ? scanOpsFile(repo, f) : scanEtlJob(repo, modeling, f)
+        for (const f of r.files.filter((x) => x.endsWith('.etl') || x.endsWith('.ops') || x.endsWith('.sql'))) {
+          const s = f.endsWith('.ops') ? scanOpsFile(repo, f) : f.endsWith('.sql') ? scanScriptJob(repo, modeling, onto, f) : scanEtlJob(repo, modeling, f)
           if (s) scans[f] = s
         }
         const pipeline = cicd?.trigger({ commitId: r.commitId, branch: r.branch, scans }) ?? null
@@ -286,12 +315,12 @@ function readTools({ repo, dryrun, modeling, cicd }) {
     {
       name: 'job_read', risk: 'read',
       description: '读取作业文件并返回结构化解析（注解头/来源表/目标表/列映射/调度参数）。view=committed 读已提交视图（默认），view=working 读工作区未提交态',
-      parameters: { type: 'object', properties: { ...pathParam, view: { type: 'string', enum: ['committed', 'working'], description: 'committed（默认）| working' } }, required: ['path'] },
+      parameters: { type: 'object', properties: { ...pathParam, view: { type: 'string', enum: ['committed', 'working'], description: 'committed（默认）| working（工作区未提交态）。已提交视图缺失时自动回退工作区' } }, required: ['path'] },
       output: jsonOut,
       execute: async ({ path, view }) => {
-        const text = mustRead(repo, path, view)
-        const parsed = path.endsWith('.dag') ? parseDag(text) : parseEtl(text)
-        return { path, view: view ?? 'committed', kind: path.endsWith('.dag') ? 'dag' : 'etl', parsed, text }
+        const rd = mustRead(repo, path, view)
+        const parsed = path.endsWith('.dag') ? parseDag(rd.text) : parseEtl(rd.text)
+        return { path, view: rd.view, kind: path.endsWith('.dag') ? 'dag' : 'etl', parsed, text: rd.text, note: rd.note }
       },
     },
 
@@ -301,7 +330,7 @@ function readTools({ repo, dryrun, modeling, cicd }) {
       parameters: { type: 'object', properties: { ...pathParam, column: { type: 'string', description: '目标列名（可选）' } }, required: ['path'] },
       output: jsonOut,
       execute: async ({ path, column }) => {
-        const parsed = parseEtl(mustRead(repo, path))
+        const parsed = parseEtl(mustRead(repo, path).text)
         if (!column) return { path, targetTable: parsed.targetTable, columns: parsed.columns }
         const hit = locateColumn(parsed, column)
         if (!hit) throw new Error(`列不存在: ${column}（现有列: ${parsed.columns.map((c) => c.alias).filter(Boolean).join(', ')}）`)
@@ -350,12 +379,13 @@ function readTools({ repo, dryrun, modeling, cicd }) {
     {
       name: 'code_lint', risk: 'read',
       description: 'ETL/调度代码检查：返回结构化问题清单（error/warn）。pass=false（有 error）时编排不变量要求不得生成 .dag、不得进入提交审批',
-      parameters: { type: 'object', properties: { ...pathParam, view: { type: 'string', enum: ['committed', 'working'], description: 'committed（默认）| working（工作区未提交态）' } }, required: ['path'] },
+      parameters: { type: 'object', properties: { ...pathParam, view: { type: 'string', enum: ['committed', 'working'], description: 'committed（默认）| working（工作区未提交态）。已提交视图缺失时自动回退工作区（未提交新作业也能扫）' } }, required: ['path'] },
       output: jsonOut,
       execute: async ({ path, view }) => {
-        const text = mustRead(repo, path, view)
+        const rd = mustRead(repo, path, view)
+        const text = rd.text
         const r = path.endsWith('.dag') ? lintDag(text, parseDag(text)) : lintEtl(text, parseEtl(text))
-        return { path, ...r }
+        return { path, view: rd.view, note: rd.note, ...r }
       },
     },
 
@@ -365,7 +395,8 @@ function readTools({ repo, dryrun, modeling, cicd }) {
       parameters: { type: 'object', properties: { ...pathParam, view: { type: 'string', enum: ['committed', 'working'], description: 'committed（默认）| working（工作区未提交态）' } }, required: ['path'] },
       output: jsonOut,
       execute: async ({ path, view }) => {
-        const p = parseEtl(mustRead(repo, path, view))
+        const rd = mustRead(repo, path, view)
+        const p = parseEtl(rd.text)
         const ok = !!p.partition && p.usesPartitionFilter
         return { path, ok, insertMode: p.insertMode, partition: p.partition, partitionFilterInWhere: p.usesPartitionFilter, advice: ok ? null : 'INSERT 需指定 PARTITION 且 WHERE 按 dt 过滤' }
       },
@@ -377,7 +408,8 @@ function readTools({ repo, dryrun, modeling, cicd }) {
       parameters: { type: 'object', properties: { ...pathParam, view: { type: 'string', enum: ['committed', 'working'], description: 'committed（默认）| working（工作区未提交态）' } }, required: ['path'] },
       output: jsonOut,
       execute: async ({ path, view }) => {
-        const p = parseEtl(mustRead(repo, path, view))
+        const rd = mustRead(repo, path, view)
+        const p = parseEtl(rd.text)
         const hits = []
         if (p.hasDrop) hits.push('DROP TABLE')
         if (p.hasTruncate) hits.push('TRUNCATE')
@@ -393,8 +425,8 @@ function readTools({ repo, dryrun, modeling, cicd }) {
       parameters: { type: 'object', properties: { ...pathParam, view: { type: 'string', enum: ['committed', 'working'], description: 'committed（默认）| working（工作区未提交态）' }, sampleRows: { type: 'number', description: '采样行数（受 Provider 上限截断）' } }, required: ['path'] },
       output: jsonOut,
       execute: async ({ path, view, sampleRows }) => {
-        const sql = mustRead(repo, path, view)
-        return { path, ...(await dryrun.dryrun({ sql, parsed: parseEtl(sql), sampleRows })) }
+        const rd = mustRead(repo, path, view)
+        return { path, view: rd.view, note: rd.note, ...(await dryrun.dryrun({ sql: rd.text, parsed: parseEtl(rd.text), sampleRows })) }
       },
     },
   ]

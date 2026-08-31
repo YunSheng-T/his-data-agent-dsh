@@ -17,6 +17,9 @@ importers:
       '@his/domain-tools-modeling':
         specifier: link:../../../packages/domain-tools-modeling
         version: link:../../../packages/domain-tools-modeling
+      '@his/domain-tools-ontology':
+        specifier: link:../../../packages/domain-tools-ontology
+        version: link:../../../packages/domain-tools-ontology
       '@his/domain-tools-ops':
         specifier: link:../../../packages/domain-tools-ops
         version: link:../../../packages/domain-tools-ops

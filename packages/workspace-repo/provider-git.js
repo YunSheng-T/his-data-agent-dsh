@@ -104,10 +104,12 @@ export class GitRepoProvider {
   /** 写工作区（未提交态）。只允许写在 etl/、dag/、ops/ 下，且扩展名受文件类型契约约束 */
   writeWorking(relPath, content) {
     const kind = fileKind(relPath)
-    if (kind === 'other') throw new Error(`文件类型契约拒绝: ${relPath}（只接受 etl/**/*.etl、dag/*.dag 与 ops/*.ops）`)
+    if (kind === 'other') throw new Error(`文件类型契约拒绝: ${relPath}（只接受 etl/**/*.etl、dag/*.dag、ops/*.ops、dbscript/*.sql 与 svc/*.svc）`)
     if (kind === 'etl' && !relPath.startsWith('etl/')) throw new Error(`.etl 必须放在 etl/ 下: ${relPath}`)
     if (kind === 'dag' && !relPath.startsWith('dag/')) throw new Error(`.dag 必须放在 dag/ 下: ${relPath}`)
     if (kind === 'ops' && !relPath.startsWith('ops/')) throw new Error(`.ops 必须放在 ops/ 下: ${relPath}`)
+    if (kind === 'script' && !relPath.startsWith('dbscript/')) throw new Error(`.sql 必须放在 dbscript/ 下: ${relPath}`)
+    if (kind === 'svc' && !relPath.startsWith('svc/')) throw new Error(`.svc 必须放在 svc/ 下: ${relPath}`)
     const abs = path.join(this.dir, relPath)
     fs.mkdirSync(path.dirname(abs), { recursive: true })
     fs.writeFileSync(abs, content)
@@ -145,5 +147,7 @@ export function fileKind(p) {
   if (p.endsWith('.etl')) return 'etl'
   if (p.endsWith('.dag')) return 'dag'
   if (p.endsWith('.ops')) return 'ops'
+  if (p.endsWith('.sql')) return 'script'
+  if (p.endsWith('.svc')) return 'svc'
   return 'other'
 }

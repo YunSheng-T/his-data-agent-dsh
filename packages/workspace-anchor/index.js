@@ -64,6 +64,13 @@ function staleJobs(ctx, repo, branch) {
 }
 
 export function apply(ctx) {
+  // 锚定状态作为服务透出（供本体层读「当前锚定的对象是什么」）：current 是模块态，
+  // 本体 provider 经 ctx.hisAnchor.getCurrent() 取最新锚定，而非由 Agent 手传 path。
+  ctx.provide('hisAnchor', {
+    getCurrent: () => (current ? { ...current } : null),
+    key: () => (current ? current.key : null),
+  })
+
   // 锚定工具：UI/人通过它切换锚点（等价于 UI 里点击文件/分支/目录）
   // 两种用法：{file} 锚定模型；{branch, dir?} 锚定代码仓三级定位
   ctx.tools.register({
@@ -88,7 +95,7 @@ export function apply(ctx) {
         const exists = repo.branches().includes(args.branch)
         const actual = repo.checkout(args.branch, { create: !exists })
         const dir = args.dir ?? null
-        if (dir && !/^(etl|dag|ops)(\/[a-z0-9_-]+)*$/i.test(dir)) throw new Error(`非法作业目录: ${dir}（只接受 etl/*、dag 或 ops）`)
+        if (dir && !/^(etl|dag|ops|dbscript|svc)(\/[a-z0-9_-]+)*$/i.test(dir)) throw new Error(`非法作业目录: ${dir}（只接受 etl/*、dag、ops、dbscript、svc）`)
         current = { kind: 'repo', branch: actual, dir, key: `repo:${actual}:${dir ?? ''}@${repo.isClean() ? 'clean' : 'dirty'}`, at: new Date().toISOString() }
         console.error(`[anchor] 锚定 -> ${current.key}${exists ? '' : '（新建分支）'}`)
         const stale = staleJobs(ctx, repo, actual)

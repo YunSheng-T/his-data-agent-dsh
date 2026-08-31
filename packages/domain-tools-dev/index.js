@@ -4,7 +4,7 @@
 // P3（V10）：git_add/git_commit 合并更名为 repo_commit（提交即自动触发 CICD 流水线）；
 // 新增 cicd_scan_report 只读工具 + hisCicd 服务透出（studio-ui 文件行扫描点的数据源）。
 
-import { buildDevTools, scanEtlJob, scanOpsFile } from './definitions.js'
+import { buildDevTools, scanEtlJob, scanOpsFile, scanScriptJob } from './definitions.js'
 import { LocalSimDryrunProvider } from './provider-dryrun.js'
 import { LocalSchedProvider } from './provider-sched.js'
 import { LocalCicdProvider, scanVerdict } from './provider-cicd.js'
@@ -12,13 +12,13 @@ import { parseEtl, parseDag } from './ast.js'
 import { jobIndex, upstream, downstream, jobsForModel } from './lineage.js'
 
 export const name = 'his-domain-tools-dev'
-export const inject = ['tools', 'hisRepo', 'hisModeling']
+export const inject = ['tools', 'hisRepo', 'hisModeling', 'hisOntology']
 
 export function apply(ctx) {
   const dryrun = new LocalSimDryrunProvider()
   const sched = new LocalSchedProvider()
   const cicd = new LocalCicdProvider()
-  const tools = buildDevTools({ repo: ctx.hisRepo, modeling: ctx.hisModeling, dryrun, sched, cicd })
+  const tools = buildDevTools({ repo: ctx.hisRepo, modeling: ctx.hisModeling, dryrun, sched, cicd, onto: ctx.hisOntology })
   for (const t of tools) ctx.tools.register(t)
   // hisDevAst：解析/血缘能力作为 Cordis 服务透出（studio-ui 不跨包 import，走服务层）
   ctx.provide('hisDevAst', {
@@ -42,7 +42,8 @@ export function apply(ctx) {
       if (e.path.startsWith('etl_legacy/')) continue
       const s = e.kind === 'etl' ? scanEtlJob(ctx.hisRepo, ctx.hisModeling, e.path)
         : e.kind === 'ops' ? scanOpsFile(ctx.hisRepo, e.path)
-          : null
+          : e.kind === 'script' ? scanScriptJob(ctx.hisRepo, ctx.hisModeling, ctx.hisOntology, e.path)
+            : null
       if (s) scans[e.path] = s
     }
     if (Object.keys(scans).length) {

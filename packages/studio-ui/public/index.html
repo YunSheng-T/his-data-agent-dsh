@@ -253,6 +253,53 @@ input,textarea,select{font-family:inherit}
 .er-row .std2{font-family:var(--mono);font-size:8.5px;color:var(--ok);flex:none}
 .er-row .std2.add{color:var(--warn);border:1px dashed rgba(154,106,20,.55);border-radius:99px;padding:0 6px}
 .er-row .std2.skip2{color:var(--faint)}
+/* V15 · 本体扫描子页签（onto 摘要 / 链路图 / 轨迹 / 对账 / 发现） */
+.onto-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+.onto-badge{font-family:var(--mono);font-size:10.5px;padding:2px 10px;border:1px solid var(--hair);border-radius:99px;color:var(--ink)}
+.onto-badge .conf{color:var(--ok);margin-left:6px}
+.onto-stats{display:flex;gap:10px;font-size:11px;color:var(--muted);font-family:var(--mono)}
+.onto-stats b{color:var(--ink)}
+.lnk-wrap{display:flex;align-items:stretch;overflow-x:auto;padding:6px 0 10px}
+.lnk-col{display:flex;flex-direction:column;gap:6px;min-width:150px;padding:0 8px}
+.lnk-node{border:1px solid var(--hair);border-radius:8px;background:rgba(255,255,255,.6);padding:6px 8px;font-size:11px}
+.lnk-node .lnk-t{font-family:var(--mono);font-size:9px;color:var(--muted)}
+.lnk-node .lnk-n{font-weight:600}
+.lnk-node .lnk-d{font-size:10px;color:var(--muted)}
+.lnk-node.hit{border-color:var(--ok);background:rgba(31,138,76,.08)}
+.lnk-node.off{opacity:.5;border-style:dashed}
+.lnk-node.rl.hot{border-color:var(--err);background:rgba(176,42,68,.06)}
+.lnk-inh{font-family:var(--mono);font-size:9px;color:var(--faint);padding:2px 0;text-align:center}
+.lnk-edge{display:flex;flex-direction:column;justify-content:center;padding:0 4px;font-family:var(--mono);font-size:9px;color:var(--muted);flex:none;text-align:center;min-width:64px}
+.lnk-edge b{font-size:9px}
+.lnk-edge span{font-size:8.5px}
+.trc{border:1px solid var(--hair);border-radius:8px;margin:8px 0;overflow:hidden}
+.trc-head{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--paper-deep);font-size:12px}
+.trc-head .st{margin-left:auto;font-family:var(--mono);font-size:9.5px;color:var(--muted)}
+.trc-body{padding:4px 12px}
+.trc-hit{display:flex;gap:8px;align-items:baseline;padding:3px 0;font-size:11px;flex-wrap:wrap}
+.trc-hit .hit{color:var(--ok);font-weight:600}
+.trc-hit .dim{color:var(--muted);font-size:10px}
+.trc-exc{color:var(--faint);font-size:10px;padding:2px 0 4px}
+.inc-wrap{display:flex;gap:12px;border:1px solid var(--hair);border-radius:8px;padding:10px;background:rgba(255,255,255,.5)}
+.inc-col{flex:1;font-size:11px}
+.inc-col h6{font-family:var(--mono);font-size:9.5px;color:var(--muted);margin:0 0 4px}
+.inc-col.mid{flex:.5;text-align:center}
+.inc-row{border-bottom:1px dashed var(--hair-soft);padding:3px 0;font-size:10.5px}
+.inc-row.bad{color:var(--err)} .inc-row.warn2{color:var(--warn)} .inc-row.ok2{color:var(--ok)} .inc-row.dim2{color:var(--faint)}
+.fnd{border:1px solid var(--hair);border-radius:8px;margin:8px 0;overflow:hidden}
+.fnd-head{padding:8px 12px;border-bottom:1px solid var(--hair-soft);font-size:12px;display:flex;align-items:center;gap:8px}
+.fnd-sev{font-size:9.5px;padding:1px 7px;border-radius:99px;font-family:var(--mono)}
+.fnd-sev.warn{background:rgba(154,106,20,.15);color:var(--warn)} .fnd-sev.ok{background:rgba(31,138,76,.15);color:var(--ok)} .fnd-sev.info{background:rgba(109,106,100,.12);color:var(--muted)}
+.fnd-desc{padding:8px 12px;font-size:11px;color:var(--muted)}
+.fnd-chain{padding:6px 12px;font-size:10.5px;font-family:var(--mono);color:var(--muted);border-top:1px dashed var(--hair-soft)}
+/* V15.1 · 本体推理链（X6 图容器，对齐 ER 图） */
+.onto-x6-box{border:1px solid var(--hair);border-radius:10px;background:#fbfaf6;overflow:hidden;margin:6px 0 10px}
+.onto-node{border:1.4px solid rgba(11,11,11,.35);border-radius:8px;background:#fffdf8;padding:6px 9px;height:100%;font-family:var(--sans);overflow:hidden}
+.onto-node .on-type{font-family:var(--mono);font-size:8.5px;letter-spacing:.08em;color:var(--muted);text-transform:uppercase}
+.onto-node .on-name{font-weight:700;font-size:12px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.onto-node .on-sub{font-family:var(--mono);font-size:9px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.onto-node.hit{border-color:#0b0b0b;border-width:1.6px}
+.onto-node.rule{border-color:rgba(176,42,68,.5)}
 </style>
 <script src="/vendor/x6.js"></script>
 </head>
@@ -345,12 +392,45 @@ let auditEvents = [];
 const $ = (s) => document.querySelector(s);
 const api = (p, o) => fetch(p, o).then((r) => r.json());
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+// 本体对象类型作用域查询工具：工具名是 snake_case（LLM schema 不允许点号），
+// 显示时转回 ObjectType.method(arg) 形式 —— 会话流打印出 Policy.getPolicies(inst/dbscript)。
+// 本体对象类型作用域查询工具：工具名是 snake_case（LLM schema 不允许点号），
+// 显示时转回 ObjectType.method(arg) 形式 —— 会话流打印出 Policy.getPolicies(inst/dbscript)。
+const ONTO_Q = {
+  policy_get_policies: ['Policy', 'getPolicies'],
+  policy_get_rules: ['Policy', 'getRules'],
+  rule_get_implementations: ['Rule', 'getImplementations'],
+  platform_get_policies: ['PlatformInstance', 'getPolicies'],
+  platform_get_rules: ['PlatformInstance', 'getRules'],
+  platform_get_job_types: ['PlatformInstance', 'getJobTypes'],
+  job_type_get_platform: ['JobType', 'getPlatform'],
+  rule_impl_get_job_type: ['RuleImpl', 'getJobType'],
+  model_get_fields: ['Model', 'getFields'],
+  model_get_jobs: ['Model', 'getImplementingJobs'],
+};
+// 本体 Function 工具白名单（无 ontology_ 前缀，用名单标记 [ontology-function] 徽标）
+const ONTO_TOOLS = new Set([
+  'get_anchored_object', 'get_object_type', 'get_links',
+  'policy_get_policies', 'policy_get_rules', 'rule_get_implementations',
+  'platform_get_policies', 'platform_get_rules', 'platform_get_job_types',
+  'job_type_get_platform', 'rule_impl_get_job_type', 'model_get_fields', 'model_get_jobs',
+  'list_functions', 'list_actions', 'classify_job', 'policies_for', 'rules_for',
+  'get_scan_plan', 'check_consistency', 'get_lineage_upstream', 'get_lineage_downstream',
+  'get_impact', 'explain_finding', 'propose',
+]);
+function ontoToolLabel(name, argsObj) {
+  const m = ONTO_Q[name];
+  const argVal = argsObj && (argsObj.platform || argsObj.policy || argsObj.rule || argsObj.impl || argsObj.jobType || argsObj.model || '');
+  return m ? m[0] + '.' + m[1] + '(' + argVal + ')' : name;
+}
 function toast(m) { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(t._tm); t._tm = setTimeout(() => t.classList.remove('show'), 2200); }
 
 const MODEL_TABS = [['design','模型设计'],['er','ER 图'],['ddl','DDL'],['publish','资产发布']];
 const ETL_TABS = [['flow','可视化'],['code','代码'],['test','测试运行'],['lineage','血缘影响']];
 const DAG_TABS = [['graph','依赖图'],['yaml','配置代码']];
 const OPS_TABS = [['seq','执行序列'],['dsl','DSL 代码'],['pair','配对校验']];
+const SCRIPT_TABS = [['code','脚本代码'],['scan','扫描'],['lineage','血缘影响']];
+const SVC_TABS = [['code','定义代码'],['lineage','血缘影响']];
 
 /* ================= 左栏：空间切换 ================= */
 document.querySelectorAll('#menu button[data-mode]').forEach((b) => b.addEventListener('click', () => {
@@ -503,7 +583,7 @@ function renderFileTabs() {
 
 /* ================= 中央：工作区 ================= */
 function renderSubTabs(kind, fkind) {
-  const tabs = kind === 'model' ? MODEL_TABS : fkind === 'dag' ? DAG_TABS : fkind === 'ops' ? OPS_TABS : ETL_TABS;
+  const tabs = kind === 'model' ? MODEL_TABS : fkind === 'dag' ? DAG_TABS : fkind === 'ops' ? OPS_TABS : fkind === 'script' ? SCRIPT_TABS : fkind === 'svc' ? SVC_TABS : ETL_TABS;
   if (!tabs.some(([k]) => k === activeTab)) activeTab = tabs[0][0];
   $('#sub-tabs').innerHTML = tabs.map(([k, label]) => `<button class="stab ${k === activeTab ? 'on' : ''}" data-tab="${k}">${label}</button>`).join('');
   $('#sub-tabs').querySelectorAll('.stab').forEach((t) => t.addEventListener('click', () => { activeTab = t.dataset.tab; renderWorkspace(); }));
@@ -731,6 +811,12 @@ async function renderRepoWs() {
     if (activeTab === 'pair') return viewOpsPair(f);
     return viewOpsSeq(f);
   }
+  if (f.kind === 'script') {
+    if (activeTab === 'code') return viewCode(f);
+    if (activeTab === 'scan') return viewScriptScan(f);
+    return viewJobLineage(f);
+  }
+  if (f.kind === 'svc') return activeTab === 'code' ? viewCode(f) : viewJobLineage(f);
   if (activeTab === 'flow') return viewFlow(f);
   if (activeTab === 'code') return viewCode(f);
   if (activeTab === 'test') return viewTest(f);
@@ -798,6 +884,138 @@ function viewTest(f) {
     ${r.note ? `<p class="note">${esc(r.note)}</p>` : ''}
     <button class="btn primary" id="btn-test" style="margin-top:10px">重新运行</button>`;
   $('#btn-test').addEventListener('click', () => { delete testResults[active.file]; renderWorkspace(); });
+}
+/* 本体驱动扫描 · 扫描页签（V15 @his/domain-tools-ontology） */
+async function viewScriptScan(f) {
+  const d = await api('/api/repo/onto-scan?path=' + encodeURIComponent(active.file));
+  if (d.error) { $('#ws-body').innerHTML = '<p class="note">' + esc(d.error) + '</p>'; return; }
+  const cls = d.classify, pol = d.policies || [], rl = d.rules, match = d.match, findings = d.findings || [], trace = d.trace || [], plan = d.scanPlan || null;
+  if (!cls || !cls.ok) { $('#ws-body').innerHTML = '<p class="note">' + esc((cls && cls.note) || '本体分类失败（fail-closed 转人工归类）') + '</p>'; return; }
+  let h = '<div class="sec-title">本体驱动扫描 <span class="tlabel">' + esc(active.file) + '</span></div>';
+  const rlb = match && match.releaseBaseline ? match.releaseBaseline : null;
+  const impls = (rl && rl.rules ? rl.rules.map(function (r) { return r.impl ? r.impl.ruleset : null }).filter(Boolean) : []);
+  const implUnique = impls.length ? impls.filter(function (v, i) { return impls.indexOf(v) === i }).join(' / ') : '—';
+  const stats = '策略 <b>' + pol.length + '</b> · 规则 <b>' + (rl ? rl.ruleCount : '—') + '</b> · RuleImpl <b>' + implUnique + '</b> · 基线 <b>' + (rlb ? rlb.release : '—') + '</b>（模型 ' + (rlb ? rlb.modelVersion : '—') + '）· 本体 <b>' + (d.ontVersion || '—') + '</b> 快照';
+  // 锚定对象（workspace-anchor 现场派生）：当前锚定的对象是什么 + ObjectType + 直接关系
+  const an = d.anchored && d.anchored.ok ? d.anchored : null;
+  const anchoredBadge = an
+    ? '锚定对象 · ' + esc(an.objectType.typeName) + '（' + esc(an.objectType.type) + '） · ' + esc(an.anchored.name)
+    : '未锚定对象（请先在左侧切换模型/作业目录锚点）';
+  h += '<div class="onto-head"><span class="onto-badge">' + anchoredBadge + '<span class="conf">' + esc(cls.instanceOf || cls.jobTypeName) + ' · 置信 ' + (cls.confidence || '—') + '</span></span><span class="onto-stats">' + stats + '</span></div>';
+  if (an) {
+    const relChips = (an.relations || []).map(function (r) {
+      return '<span class="tlabel" style="margin-right:6px">' + esc(r.link + ' · ' + r.count) + '</span>';
+    }).join('');
+    h += '<div class="note">识别依据：' + esc(an.why || '') + '</div><div style="margin-top:6px">' + relChips + '</div>';
+  }
+  // —— 本体推理链 · X6 图（对齐 ER 图容器）：锚定对象 → ObjectType → 沿本体边 → Platform/Policy/Rule → RuleImpl ——
+  if (d.chain && d.chain.ok && d.chain.nodes && d.chain.nodes.length) {
+    h += '<div class="tlabel" style="margin:14px 0 8px">本体推理链 · ' + esc(d.chain.derivedFrom || '现场派生') + '</div>';
+    h += '<div class="onto-x6-box"><div id="onto-x6" style="width:100%;height:460px"></div></div>';
+  }
+  // 扫描计划：要扫哪些规则、怎么扫（RuleImpl.engine → 执行器）
+  if (plan && plan.scanRules && plan.scanRules.length) {
+    h += '<div class="tlabel" style="margin:14px 0 8px">扫描计划 · 要扫哪些规则、怎么扫（RuleImpl.engine → 执行器）</div>';
+    h += '<div class="lnk-wrap">' + plan.scanRules.map(function (r) {
+      return '<div class="lnk-node rl"><div class="lnk-n">' + esc(r.name) + '</div><div class="lnk-d">' + esc(r.severity + ' · ' + (r.impl ? r.impl.ruleset : '—')) + '</div></div>';
+    }).join('') + '</div>';
+    h += '<div class="note">' + esc(plan.howToScan || '') + '</div>';
+  } else if (plan) {
+    h += '<div class="tlabel" style="margin:14px 0 8px">扫描计划 · 要扫哪些规则、怎么扫</div><p class="note">' + esc(plan.howToScan || '无可执行规则（无 RuleImpl）') + '</p>';
+  }
+  // 解析轨迹（折叠列表）
+  h += '<div class="tlabel" style="margin:14px 0 8px">处理过程 · 解析轨迹（Resolution Trace）——查了什么本体、怎么找到规则、排除了什么</div>';
+  trace.forEach(function (t) {
+    h += '<div class="trc"><div class="trc-head">' + esc(t.title) + '<span class="st">' + esc(t.stat) + '</span></div><div class="trc-body">';
+    (t.hits || []).forEach(function (x) {
+      const label = x.signal || x.policy || x.rule || x.item || '';
+      h += '<div class="trc-hit">' + esc(label) + (x.value ? ' <span class="hit">' + esc(x.value) + '</span>' : '') + (x.hit ? ' <span class="hit">' + esc(x.hit) + '</span>' : '') + (x.note ? ' <span class="dim">' + esc(x.note) + '</span>' : '') + '</div>';
+    });
+    (t.excluded || []).forEach(function (x) { h += '<div class="trc-exc">— ' + esc(x) + '</div>' });
+    h += '</div></div>';
+  });
+  // 版本区间对账表
+  h += '<div class="tlabel" style="margin:14px 0 8px">版本区间增量匹配 · 设计增量 × 代码增量（字段级对账）</div>';
+  if (match) {
+    const rows = (match.conflicts || []).map(function (c) { const st = c.kind === 'MATCH-CONFLICT' ? 'bad' : c.kind === 'BEHIND' ? 'warn2' : 'ok2'; const tag = c.kind === 'MATCH-CONFLICT' ? '✗ 类型冲突' : c.kind === 'BEHIND' ? '⊘ 未实现' : '✓'; return '<div class="inc-row ' + st + '">' + esc(c.field) + ' · ' + tag + ' 设计 ' + esc(c.design || '—') + ' / 代码 ' + esc(c.code || '—') + '</div>'; }).join('');
+    h += '<div class="inc-wrap"><div class="inc-col"><h6>一致性对账 · ' + esc(match.status || '') + '</h6>' + rows + '</div><div class="inc-col mid"><h6>基线</h6><div class="inc-row">' + (rlb ? rlb.release + '（模型 ' + rlb.modelVersion + '）' : '—') + '</div><div class="inc-row dim2">implements ' + (match.implements ? match.implements.physicalTable : '—') + '</div></div></div>';
+  } else { h += '<p class="note">一致性前置未通过（无匹配模型/无基线）。</p>'; }
+  // 发现（Findings · 回挂本体节点）
+  h += '<div class="tlabel" style="margin:14px 0 8px">发现（Findings · 回挂本体节点）</div>';
+  if (!findings.length) h += '<p class="note">无发现 · 规则全部通过。</p>';
+  findings.forEach(function (fr) {
+    h += '<div class="fnd"><div class="fnd-head"><span class="fnd-sev ' + (fr.id === 'F-101' ? 'warn' : 'info') + '">' + esc(fr.severity) + '</span>' + esc(fr.id) + ' ' + esc(fr.rule || '') + ' · ' + esc(fr.target || '') + '</div><div class="fnd-desc">' + esc(fr.desc || '') + '</div><div class="fnd-chain">归因链：' + esc(fr.chain || '') + '</div></div>';
+  });
+  if (findings.some(function (fr) { return fr.id === 'F-101' })) h += '<p class="note">修复走右侧 Agent：确认后生成 gated diff（DOUBLE→DECIMAL(10,4)）落工作区未提交 → 复扫清零 → 提交仍走 repo_commit 门禁。</p>';
+  $('#ws-body').innerHTML = h;
+  if (d.chain && d.chain.ok) renderOntoChain(d.chain);
+}
+/* 本体推理链 · X6 图（V15.1 对齐 ER 图容器：分层布局 + manhattan 路由 + 边标签） */
+let ontoGraph = null;
+function ontoNodeHTML(n) {
+  const isJob = n.type === 'Job', isRule = n.type === 'Rule';
+  return '<div class="onto-node' + (isJob ? ' hit' : '') + (isRule ? ' rule' : '') + '">'
+    + '<div class="on-type">' + esc(n.type) + '</div>'
+    + '<div class="on-name">' + esc(n.name) + '</div>'
+    + (n.sub ? '<div class="on-sub">' + esc(n.sub) + '</div>' : '') + '</div>';
+}
+function renderOntoChain(chain) {
+  const el = document.getElementById('onto-x6');
+  if (!el || !window.X6) { if (el) el.innerHTML = '<p class="note">图引擎未加载（/vendor/x6.js）</p>'; return; }
+  if (ontoGraph) { ontoGraph.dispose(); ontoGraph = null; }
+  if (!window._ontoShapeReg) {
+    X6.Shape.HTML.register({ shape: 'onto-node', width: 168, height: 58, effect: ['data'], html: (cell) => ontoNodeHTML(cell.getData()) });
+    window._ontoShapeReg = true;
+  }
+  const g = new X6.Graph({ container: el, background: { color: '#fbfaf6' }, interacting: false });
+  // 分层布局：按 ObjectType 排 x（Job → JobType → PlatformInstance → Policy → Rule → RuleImpl）
+  const rank = { Job: 0, JobType: 1, PlatformInstance: 2, Policy: 3, Rule: 4, RuleImpl: 5 };
+  const cols = {};
+  for (const n of chain.nodes) { (cols[n.type] ??= []).push(n); }
+  const pos = {};
+  const RANK_ORDER = ['Job', 'JobType', 'PlatformInstance', 'Policy', 'Rule', 'RuleImpl'];
+  let cx = 40;
+  const NODE_W = 168, NODE_H = 58;
+  for (const t of RANK_ORDER) {
+    const col = cols[t];
+    if (!col || !col.length) continue;
+    // 列内垂直居中：整列高度对齐到最高列，避免某列只有 1 个节点时顶部对齐导致边斜穿
+    const colH = col.length * (NODE_H + 26) - 26;
+    const maxColH = Math.max(...RANK_ORDER.map((tt) => (cols[tt] || []).length * (NODE_H + 26) - 26));
+    let cy = 30 + Math.max(0, (maxColH - colH) / 2);
+    for (const n of col) { pos[n.id] = { x: cx, y: cy, col: t }; cy += NODE_H + 26; }
+    cx += NODE_W + 130;
+  }
+  // 未排到的类型兜底（不应发生，防御）
+  let tailX = cx;
+  for (const n of chain.nodes) {
+    if (!pos[n.id]) { pos[n.id] = { x: tailX, y: 30 }; tailX += NODE_W + 130; }
+  }
+  for (const n of chain.nodes) {
+    g.addNode({ shape: 'onto-node', id: n.id, x: pos[n.id].x, y: pos[n.id].y, width: NODE_W, height: NODE_H, data: n });
+  }
+  // 边：双方都在场才画。用 ports（左右侧锚点）让 fan-out 边从节点左右侧中点进出，
+  // 避免默认中心锚点导致多线在节点上汇聚重叠；边标签错开放在中点。
+  const hasId = (id) => chain.nodes.some((n) => n.id === id);
+  // 统计每个源节点的出边序号，用于错开锚点（dy 偏移）防止多线重叠
+  const outCount = {};
+  for (const e of chain.edges) outCount[e.from] = (outCount[e.from] || 0) + 1;
+  const outSeen = {};
+  for (const e of chain.edges) {
+    if (!hasId(e.from) || !hasId(e.to)) continue;
+    const srcNode = g.getCellById(e.from), dstNode = g.getCellById(e.to);
+    const dy = (idx, n) => (n <= 1 ? 0 : (idx - (n - 1) / 2) * 18);
+    const si = outSeen[e.from] || 0; outSeen[e.from] = si + 1;
+    g.addEdge({
+      source: { cell: e.from, anchor: { name: 'midSide', args: { side: 'right', dy: dy(si, outCount[e.from]) } } },
+      target: { cell: e.to, anchor: { name: 'midSide', args: { side: 'left', dy: 0 } } },
+      router: { name: 'manhattan', args: { padding: 18 } }, connector: { name: 'rounded', args: { radius: 8 } },
+      attrs: { line: { stroke: '#6d6a64', strokeWidth: 1.1, targetMarker: { name: 'block', width: 6, height: 6 } } },
+      labels: [{ attrs: { label: { text: e.label, fill: '#9a6a14', fontSize: 9, fontFamily: 'JetBrains Mono, monospace' }, body: { fill: '#fbfaf6', stroke: '#e3ded3', rx: 4, ry: 4 } }, position: { distance: 0.5, offset: 14 } }],
+    });
+  }
+  g.zoomToFit({ padding: 28, maxScale: 1 });
+  ontoGraph = g;
 }
 /* 血缘影响（作业级） */
 async function viewJobLineage(f) {
@@ -1025,7 +1243,11 @@ function renderEvents(events) {
       if (busy) showThinking('模型生成中');
     } else if (e.type === 'tool/call') {
       showThinking(`调用工具 ${d.name}`);
-      pendingTermLines.push([`$ ${d.name} ${(typeof d.arguments === 'string' ? d.arguments : JSON.stringify(d.arguments ?? '')).slice(0, 120)}`]);
+      const isOnto = ONTO_TOOLS.has(d.name);
+      let argObj = {}; try { argObj = typeof d.arguments === 'string' ? JSON.parse(d.arguments || '{}') : (d.arguments ?? {}); } catch {}
+      const label = ontoToolLabel(d.name, argObj);
+      const argTxt = Object.keys(argObj).length ? JSON.stringify(argObj) : '';
+      pendingTermLines.push([`${isOnto ? '$ ⬢ [ontology-function]' : '$'} ${label} ${argTxt}`]);
     } else if (e.type === 'tool/code-dispatch') {
       showThinking(`工具 ${d.name}`);
       pendingTermLines.push([`  ↳ ${d.name}(${(typeof d.arguments === 'string' ? d.arguments : JSON.stringify(d.arguments ?? '')).slice(0, 90)})`, d.isError]);
@@ -1164,7 +1386,7 @@ async function send(text, silent) {
   poll();
 }
 $('#send').addEventListener('click', () => send());
-$('#prompt').addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) send(); });
+$('#prompt').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
 async function poll() {
   if (!sessionId) return;
   const d = await api(`/api/sessions/${sessionId}/events?after=${lastSeq}`);

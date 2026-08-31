@@ -1,0 +1,250 @@
+// @his/domain-tools-ontology — ontology.js：数据开发本体的语义层（五原语之 Object + Link）
+//
+// 定位（Palantir Ontology 范式）：本体 = 语义层（Object/Link）+ 动力学层（Action/Function）。
+// 本文件拆成两层：
+//   DEFINITION（语义层·定义型，固定）：PlatformInstance/JobType/Policy/Rule/RuleImpl + 治理关系
+//   buildReferenceGraph（引用层·投影型，现场派生）：从 建模空间(hisModeling)+代码仓(hisRepo) 投影
+//     Model/Field/DataStandard/ModelVersion/Job/Directory + implements/instanceOf/inDirectory/hasField 等关系
+//   buildGraph(repo, modeling) = DEFINITION + buildReferenceGraph 合并后的完整图（供 provider 推理）
+// 规则（Policy/Rule/RuleImpl）是普通 Object Type + Link，不是独立原语。
+
+// ---------- 对象类型 schema ----------
+export const OBJECT_TYPES = {
+  Model:           { props: ['name', 'physicalTable', 'domain', 'layer', 'version', 'published'] },
+  Field:           { props: ['name', 'type', 'comment', 'std'] },
+  DataStandard:    { props: ['code', 'version', 'rule', 'status'] },
+  ModelVersion:    { props: ['version', 'summary', 'release'] },
+  PlatformInstance:{ props: ['name', 'style', 'engine'] },
+  JobType:         { props: ['name', 'instance'] },
+  Job:             { props: ['path', 'engine', 'targetTable', 'code'] },
+  Directory:       { props: ['path'] },
+  Policy:          { props: ['name', 'goal'] },
+  Rule:            { props: ['name', 'severity', 'stage', 'policy', 'platform'] },
+  RuleImpl:        { props: ['engine', 'ruleset', 'jobType'] },
+  Release:         { props: ['release', 'commit', 'modelVersion'] },
+}
+
+// ---------- 关系类型 schema ----------
+export const LINK_TYPES = {
+  implements:      { from: 'Job', to: 'Model' },
+  hasField:        { from: 'Model', to: 'Field' },
+  binds:           { from: 'Field', to: 'DataStandard' },
+  hasVersion:      { from: 'Model', to: 'ModelVersion' },
+  instanceOf:      { from: 'Job', to: 'JobType' },
+  hasJobType:      { from: 'PlatformInstance', to: 'JobType' },
+  inDirectory:     { from: 'Job', to: 'Directory' },
+  releaseBaseline: { from: 'Release', to: 'Job' },
+  containsRule:    { from: 'Policy', to: 'Rule' },
+  covers:          { from: 'Policy', to: 'PlatformInstance' },
+  appliesTo:       { from: 'Rule', to: 'PlatformInstance' },
+  implementedBy:   { from: 'Rule', to: 'RuleImpl' },
+  bindsJobType:    { from: 'RuleImpl', to: 'JobType' },
+}
+
+// ---------- 语义层 · 定义型（固定） ----------
+export const DEFINITION = {
+  objects: {
+    'inst/dbscript':  { type: 'PlatformInstance', name: '数据库脚本平台', style: '高代码', engine: 'sql-scanner' },
+    'inst/flashsync': { type: 'PlatformInstance', name: 'FlashSync', style: '低代码', engine: 'flashsync-parser' },
+    'inst/bds':       { type: 'PlatformInstance', name: 'BDS', style: '高代码', engine: 'bds-parser' },
+    'inst/schedule':  { type: 'PlatformInstance', name: '数据调度平台', style: '—', engine: 'sched' },
+    'inst/svc':       { type: 'PlatformInstance', name: '数据服务平台', style: '—', engine: 'svc' },
+    'jt/schema-change':     { type: 'JobType', name: 'DDL', instance: 'inst/dbscript' },
+    'jt/transfer':          { type: 'JobType', name: '传输任务', instance: 'inst/flashsync' },
+    'jt/process-flashsync': { type: 'JobType', name: '加工任务', instance: 'inst/flashsync' },
+    'jt/process-bds':       { type: 'JobType', name: '加工任务', instance: 'inst/bds' },
+    'jt/schedule':          { type: 'JobType', name: '调度作业', instance: 'inst/schedule' },
+    'jt/svc':               { type: 'JobType', name: '数据服务', instance: 'inst/svc' },
+    'jt/ops':               { type: 'JobType', name: '运维编排', instance: 'inst/schedule' },
+    'pol/design-consistency': { type: 'Policy', name: '设计开发一致性', goal: '设计态↔开发态对齐' },
+    'pol/script-quality':     { type: 'Policy', name: '脚本质量规范', goal: '脚本编制质量' },
+    'pol/sql-safety':         { type: 'Policy', name: 'SQL 安全规范', goal: '高危/安全红线' },
+    'rule/rc@dbscript-field-type':    { type: 'Rule', name: '字段类型一致性', severity: '告警', stage: '流水线', policy: 'pol/design-consistency', platform: 'inst/dbscript' },
+    'rule/rc@dbscript-table':         { type: 'Rule', name: '表模型一致性', severity: '阻断', stage: '流水线', policy: 'pol/design-consistency', platform: 'inst/dbscript' },
+    'rule/rc@dbscript-field-missing': { type: 'Rule', name: '字段缺失/多余', severity: '告警', stage: '流水线', policy: 'pol/design-consistency', platform: 'inst/dbscript' },
+    'rule/rc@etl-field-type':         { type: 'Rule', name: '字段类型一致性', severity: '告警', stage: '流水线', policy: 'pol/design-consistency', platform: 'inst/flashsync' },
+    'rule/rc@etl-danger':             { type: 'Rule', name: '高危操作检测', severity: '阻断', stage: '全阶段', policy: 'pol/sql-safety', platform: 'inst/flashsync' },
+    'impl/se-sql-1.8':      { type: 'RuleImpl', engine: 'sql-scanner', ruleset: 'se-sql 1.8', jobType: 'jt/schema-change' },
+    'impl/fs-transfer-2.1': { type: 'RuleImpl', engine: 'flashsync-parser', ruleset: 'fs-transfer 2.1', jobType: 'jt/transfer' },
+    'impl/bds-etl-3.0':     { type: 'RuleImpl', engine: 'bds-parser', ruleset: 'bds-etl 3.0', jobType: 'jt/process-bds' },
+  },
+  links: [
+    { type: 'hasJobType', from: 'inst/dbscript', to: 'jt/schema-change' },
+    { type: 'hasJobType', from: 'inst/flashsync', to: 'jt/transfer' },
+    { type: 'hasJobType', from: 'inst/flashsync', to: 'jt/process-flashsync' },
+    { type: 'hasJobType', from: 'inst/bds', to: 'jt/process-bds' },
+    { type: 'hasJobType', from: 'inst/schedule', to: 'jt/schedule' },
+    { type: 'hasJobType', from: 'inst/svc', to: 'jt/svc' },
+    { type: 'containsRule', from: 'pol/design-consistency', to: 'rule/rc@dbscript-field-type' },
+    { type: 'containsRule', from: 'pol/design-consistency', to: 'rule/rc@dbscript-table' },
+    { type: 'containsRule', from: 'pol/design-consistency', to: 'rule/rc@dbscript-field-missing' },
+    { type: 'containsRule', from: 'pol/design-consistency', to: 'rule/rc@etl-field-type' },
+    { type: 'containsRule', from: 'pol/sql-safety', to: 'rule/rc@etl-danger' },
+    { type: 'covers', from: 'pol/design-consistency', to: 'inst/dbscript' },
+    { type: 'covers', from: 'pol/design-consistency', to: 'inst/flashsync' },
+    { type: 'covers', from: 'pol/script-quality', to: 'inst/dbscript' },
+    { type: 'covers', from: 'pol/sql-safety', to: 'inst/dbscript' },
+    { type: 'appliesTo', from: 'rule/rc@dbscript-field-type', to: 'inst/dbscript' },
+    { type: 'appliesTo', from: 'rule/rc@dbscript-table', to: 'inst/dbscript' },
+    { type: 'appliesTo', from: 'rule/rc@dbscript-field-missing', to: 'inst/dbscript' },
+    { type: 'appliesTo', from: 'rule/rc@etl-field-type', to: 'inst/flashsync' },
+    { type: 'appliesTo', from: 'rule/rc@etl-danger', to: 'inst/flashsync' },
+    { type: 'implementedBy', from: 'rule/rc@dbscript-field-type', to: 'impl/se-sql-1.8' },
+    { type: 'implementedBy', from: 'rule/rc@etl-field-type', to: 'impl/fs-transfer-2.1' },
+    { type: 'implementedBy', from: 'rule/rc@etl-field-type', to: 'impl/bds-etl-3.0' },
+    { type: 'bindsJobType', from: 'impl/se-sql-1.8', to: 'jt/schema-change' },
+    { type: 'bindsJobType', from: 'impl/fs-transfer-2.1', to: 'jt/transfer' },
+    { type: 'bindsJobType', from: 'impl/bds-etl-3.0', to: 'jt/process-bds' },
+  ],
+}
+
+// ---------- 引用层 · 投影型（现场派生） ----------
+export function extractTable(text) {
+  if (!text) return null
+  const m = text.match(/INSERT\s+(OVERWRITE|INTO)\s+TABLE\s+([\w.]+)/i) || text.match(/ALTER\s+TABLE\s+(\S+)/i) || text.match(/FROM\s+([\w.]+)/i)
+  return m ? m[m.length - 1].split('.').pop() : null
+}
+export function extractEngine(text) {
+  return (text && text.match(/--\s*@engine:\s*(\S+)/))?.[1] ?? null
+}
+export function inferJobType(path) {
+  const d = (path || '').split('/')[0]
+  if (d === 'dbscript') return 'jt/schema-change'
+  if (d.startsWith('etl/ods')) return 'jt/transfer'
+  if (d.startsWith('etl')) return 'jt/process-bds'
+  if (d === 'dag') return 'jt/schedule'
+  if (d === 'svc') return 'jt/svc'
+  if (d === 'ops') return 'jt/ops'
+  return null
+}
+
+/** 引用层投影：从建模空间 + 代码仓 现场派生 Model/Field/Job 等 + 关系 */
+export function buildReferenceGraph(repo, modeling) {
+  const objects = {}
+  const links = []
+  const branch = repo.currentBranch()
+  const models = modeling?._state?.models ? Object.values(modeling._state.models) : []
+  for (const m of models) {
+    const mid = 'model/' + m.file
+    objects[mid] = { type: 'Model', name: m.name, physicalTable: m.name, domain: m.domain, layer: m.layer, version: m.version, published: m.published }
+    const vid = mid + '@v' + m.version
+    objects[vid] = { type: 'ModelVersion', version: m.version, summary: '模型 ' + m.name, release: null }
+    links.push({ type: 'hasVersion', from: mid, to: vid })
+    for (const f of m.fields || []) {
+      const fid = mid + '/field/' + f.n
+      objects[fid] = { type: 'Field', name: f.n, datatype: f.t, comment: f.c, std: f.std }
+      links.push({ type: 'hasField', from: mid, to: fid })
+      if (f.std) {
+        const sid = 'std/' + f.std
+        objects[sid] = objects[sid] || { type: 'DataStandard', code: f.std }
+        links.push({ type: 'binds', from: fid, to: sid })
+      }
+    }
+  }
+  // 目录树用 treeWithState（已提交 + 未提交覆盖）：dbscript/svc 这类未提交的新作业也必须投影进本体，
+  // 否则「当前锚定的对象」在未提交态下会显示为空目录（扫描语义是工作区现场，不是只看已提交视图）
+  const tree = repo.treeWithState ? repo.treeWithState(branch) : (repo.tree ? repo.tree(branch) : [])
+  for (const e of tree) {
+    if (!['etl', 'script', 'dag', 'svc', 'ops'].includes(e.kind)) continue
+    const text = repo.readCommitted(branch, e.path) ?? repo.readWorking(e.path)
+    const jobId = 'job/' + e.path
+    objects[jobId] = { type: 'Job', path: e.path, engine: extractEngine(text) || 'Hive SQL', targetTable: extractTable(text) }
+    const dir = e.path.split('/').slice(0, -1).join('/')
+    const dirId = 'dir/' + dir
+    if (!objects[dirId]) objects[dirId] = { type: 'Directory', path: dir }
+    links.push({ type: 'inDirectory', from: jobId, to: dirId })
+    const jtId = inferJobType(e.path)
+    if (jtId) links.push({ type: 'instanceOf', from: jobId, to: jtId })
+    const ttail = objects[jobId].targetTable
+    const model = models.find((m) => m.name === ttail)
+    if (model) links.push({ type: 'implements', from: jobId, to: 'model/' + model.file })
+  }
+  return { objects, links }
+}
+
+/** 完整图 = 语义层定义 + 引用层投影 */
+export function buildGraph(repo, modeling) {
+  const ref = buildReferenceGraph(repo, modeling)
+  return { objects: { ...DEFINITION.objects, ...ref.objects }, links: [...DEFINITION.links, ...ref.links] }
+}
+
+// ---------- 图遍历 ----------
+export function traverse(graph, fromId, linkType, { reverse = false } = {}) {
+  const g = graph || DEFINITION
+  return g.links.filter((l) => l.type === linkType && (reverse ? l.to === fromId : l.from === fromId)).map((l) => (reverse ? l.from : l.to))
+}
+export function getObject(graph, id) {
+  const g = graph || DEFINITION
+  return g.objects[id] ? { id, ...g.objects[id] } : null
+}
+
+// ---------- 类型目录 · Palantir ObjectType 内省（type()） ----------
+// 本体应当有 type()/links()/actions()/functions() 四种能力（Palantir Ontology 范式）：
+//   type(type)  —— 某 ObjectType 的 primitive + 属性 schema + 参与的关系类型（含方向）
+//   links(id)   —— 从某对象/类型出发沿所有 link 取邻接（关系遍历）
+//   functions() —— 动力学层·Function 目录（只读语义推理）
+//   actions()   —— 动力学层·Action 目录（写，gated）
+
+/** ObjectType 内省：primitive + 属性 schema + 参与的关系类型（out/in） */
+export function typeOf(type) {
+  const schema = OBJECT_TYPES[type]
+  if (!schema) return null
+  const links = []
+  for (const [name, def] of Object.entries(LINK_TYPES)) {
+    if (def.from === type) links.push({ name, from: def.from, to: def.to, direction: 'out' })
+    if (def.to === type) links.push({ name, from: def.from, to: def.to, direction: 'in' })
+  }
+  return { type, primitive: 'Object', props: schema.props, links }
+}
+export function listTypes() {
+  return Object.keys(OBJECT_TYPES).map((t) => typeOf(t)).filter(Boolean)
+}
+
+/** 邻接遍历（links）：id 是 ObjectType 名 → 类型级 link 类型；id 是对象 id → 实例级邻接 */
+export function links(graph, id) {
+  const g = graph || DEFINITION
+  const obj = g.objects[id] || null
+  const out = []
+  for (const l of g.links) {
+    if (l.from === id) {
+      const t = g.objects[l.to]
+      out.push({ link: l.type, direction: 'out', from: id, to: l.to, toType: t ? t.type : null, toName: t ? (t.name ?? t.path ?? t.code ?? l.to) : l.to })
+    }
+    if (l.to === id) {
+      const f = g.objects[l.from]
+      out.push({ link: l.type, direction: 'in', from: l.from, to: id, fromType: f ? f.type : null, fromName: f ? (f.name ?? f.path ?? f.code ?? l.from) : l.from })
+    }
+  }
+  return { id, type: obj ? obj.type : null, name: obj ? (obj.name ?? obj.path ?? obj.code ?? id) : null, links: out }
+}
+
+// ---------- 动力学层声明（actions() / functions() 目录） ----------
+export const FUNCTIONS = [
+  { name: 'get_anchored_object', risk: 'read', returns: 'ObjectType + 直接关系 + jobTypes', purpose: '当前锚定的对象是什么' },
+  { name: 'get_object_type', risk: 'read', returns: 'ObjectType schema + link 类型', purpose: '对象类型内省' },
+  { name: 'get_links', risk: 'read', returns: '邻接对象（关系遍历）', purpose: '沿本体关系遍历' },
+  { name: 'policy_get_policies', risk: 'read', returns: '平台策略', purpose: 'Policy.getPolicies(platform) · covers(逆向) 取覆盖某平台的策略' },
+  { name: 'policy_get_rules', risk: 'read', returns: '策略下规则', purpose: 'Policy.getRules(policy) · containsRule 取策略下的规则' },
+  { name: 'rule_get_implementations', risk: 'read', returns: '规则实现', purpose: 'Rule.getImplementations(rule) · implementedBy 取规则实现（engine 指向执行器）' },
+  { name: 'platform_get_policies', risk: 'read', returns: '平台策略', purpose: 'PlatformInstance.getPolicies(platform) · covers(逆向) 从平台侧取策略' },
+  { name: 'platform_get_rules', risk: 'read', returns: '平台规则', purpose: 'PlatformInstance.getRules(platform) · appliesTo(逆向) 取平台规则' },
+  { name: 'platform_get_job_types', risk: 'read', returns: '平台作业类型', purpose: 'PlatformInstance.getJobTypes(platform) · hasJobType 取平台作业类型' },
+  { name: 'job_type_get_platform', risk: 'read', returns: '归属平台', purpose: 'JobType.getPlatform(jobType) · hasJobType(逆向) 取作业类型归属平台' },
+  { name: 'rule_impl_get_job_type', risk: 'read', returns: '绑定作业类型', purpose: 'RuleImpl.getJobType(impl) · bindsJobType 取实现绑定的作业类型' },
+  { name: 'model_get_fields', risk: 'read', returns: '模型字段', purpose: 'Model.getFields(model) · hasField 取模型字段' },
+  { name: 'model_get_jobs', risk: 'read', returns: '实现作业', purpose: 'Model.getImplementingJobs(model) · implements(逆向) 取实现模型的作业' },
+  { name: 'classify_job', risk: 'read', returns: '作业类型 + 平台 + 置信度', purpose: '作业分类（特征推理）' },
+  { name: 'policies_for', risk: 'read', returns: '平台适用的策略', purpose: 'covers 逆向查策略（Policy.getPolicies 糖）' },
+  { name: 'rules_for', risk: 'read', returns: '规则 + RuleImpl', purpose: 'appliesTo 逆向查规则（Rule.getRules 糖）' },
+  { name: 'get_scan_plan', risk: 'read', returns: '可执行规则 + 引擎 + 怎么扫', purpose: '要扫哪些规则、怎么扫' },
+  { name: 'check_consistency', risk: 'read', returns: '四态一致性对账', purpose: '设计态↔开发态一致性对账' },
+  { name: 'get_lineage_upstream', risk: 'read', returns: '上游血缘', purpose: '来源表 ← 生产作业' },
+  { name: 'get_lineage_downstream', risk: 'read', returns: '下游血缘', purpose: '下游影响面' },
+  { name: 'get_impact', risk: 'read', returns: '实现该模型的作业', purpose: '模型变更影响面' },
+  { name: 'explain_finding', risk: 'read', returns: '归因链', purpose: '发现回溯到规则/策略' },
+  { name: 'list_functions', risk: 'read', returns: 'Function 目录', purpose: '动力学层·只读语义推理清单' },
+  { name: 'list_actions', risk: 'read', returns: 'Action 目录', purpose: '动力学层·写操作清单' },
+]
+export const ACTIONS = [
+  { name: 'propose', risk: 'knowledge-write', purpose: '提交规则/类型提案、回写归类断言、DIVERGE 裁决（gated）' },
+]

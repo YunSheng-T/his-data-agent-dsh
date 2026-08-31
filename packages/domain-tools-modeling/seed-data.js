@@ -39,17 +39,23 @@ export const MODELS = {
   },
   'dwd_tax_payment.model': {
     file: 'dwd_tax_payment.model', name: 'dwd_tax_payment', cn: '缴款流水 · 事实表',
-    domain: '财税域', layer: 'DWD', version: 'v1.0', published: false,
+    domain: '财税域', layer: 'DWD', version: 'v4', published: false,
+    release: 'REL-0820', // 设计基线（dbscript 实现 v3→v4 增量）
     fields: [
       { n: 'pay_id', t: 'STRING', c: '缴款ID', std: null, pk: true, skip: '业务主键 · 免绑' },
       { n: 'decl_id', t: 'STRING', c: '关联申报', std: null },
       { n: 'taxpayer_id', t: 'STRING', c: '纳税人识别号', std: 'std/TAXPAYER_ID v2' },
       { n: 'pay_channel_cd', t: 'STRING', c: '缴款渠道', std: 'std/PAY_CHANNEL v2' },
       { n: 'pay_amt', t: 'DECIMAL(14,2)', c: '缴款金额', std: 'std/AMOUNT v1' },
+      { n: 'tax_rate', t: 'DECIMAL(10,4)', c: '缴款税率（设计 v4 增量）', std: null },
+      { n: 'pay_fee', t: 'DECIMAL(14,2)', c: '手续费（设计 v4 增量）', std: null },
       { n: 'pay_ts', t: 'TIMESTAMP', c: '缴款时间', std: 'std/BIZ_TS v2' },
       { n: 'dt', t: 'STRING', c: '月分区 yyyyMM', std: null, skip: '分区字段 · 规范免绑' },
     ],
-    versions: [{ v: 'v1.0', n: '初版', t: '08-15' }],
+    versions: [
+      { v: 'v4', n: 'v3→v4 增量：新增 tax_rate/pay_fee（dbscript 实现）', t: '08-22' },
+      { v: 'v1.0', n: '初版', t: '08-15' },
+    ],
   },
 }
 

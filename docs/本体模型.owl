@@ -1,0 +1,126 @@
+@prefix : <http://his-data-agent.example.com/ontology/data-dev#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<http://his-data-agent.example.com/ontology/data-dev> a owl:Ontology ;
+  rdfs:label "HIS Data Agent · 数据开发本体" ;
+  rdfs:comment "数据开发领域本体：PlatformType(平台类型)→PlatformInstance(平台实例)→JobType(作业类型)→Job(目录/作业)；Policy(治理目标)跨平台聚合Rule；Rule挂平台类型；RuleImpl挂作业类型；引用层/实例层投影。" .
+
+#################################################################
+# 类（Classes）
+#################################################################
+
+# —— 定义层：平台与作业 ——
+:PlatformType a owl:Class ; rdfs:comment "平台类型（四类取值：dbscript 数据库脚本 / etl 数据ETL / sched 数据调度 / svc 数据服务）" .
+:PlatformInstance a owl:Class ; rdfs:comment "平台实例（具体平台：FlashSync/BDS/Dolphin；低代码/高代码，格式/解析器/规则不同）" .
+:JobType a owl:Class ; rdfs:comment "作业类型（属于某平台实例；如 FlashSync 的 传输任务/加工任务）" .
+:Job a owl:Class ; rdfs:comment "具体作业（实例）" .
+:Directory a owl:Class ; rdfs:comment "作业目录（作业树：目录→作业）" .
+
+# —— 定义层：治理 ——
+:Policy a owl:Class ; rdfs:comment "治理目标（跨平台、大颗粒；如 设计开发一致性）" .
+:Rule a owl:Class ; rdfs:comment "规则（挂平台类型 + 属某 Policy；如 字段类型一致性）" .
+:RuleImpl a owl:Class ; rdfs:comment "规则实现（Rule × 作业类型 → 实现；一 Rule 多实现）" .
+
+# —— 引用层 ——
+:Model a owl:Class ; rdfs:comment "数据模型投影（physicalTable 为 implements 推导键）" .
+:ModelVersion a owl:Class ; rdfs:comment "模型版本" .
+:ModelIncrement a owl:Class ; rdfs:comment "模型版本区间结构化增量" .
+:CodeIncrement a owl:Class ; rdfs:comment "作业代码增量" .
+:Release a owl:Class ; rdfs:comment "发布版本（最近发布即基线）" .
+
+# —— 实例层 ——
+:ScanRun a owl:Class ; rdfs:comment "扫描运行（带本体版本快照）" .
+:Finding a owl:Class ; rdfs:comment "发现（回挂 Rule）" .
+:ResolutionTrace a owl:Class ; rdfs:comment "解析轨迹（四段）" .
+
+#################################################################
+# 对象属性（Object Properties）
+#################################################################
+
+# 平台组织：类型 → 实例 → 作业类型 → 作业/目录
+:hasPlatformInstance a owl:ObjectProperty ; rdfs:domain :PlatformType ; rdfs:range :PlatformInstance ; rdfs:comment "平台类型包含平台实例（etl 下 FlashSync/BDS）" .
+:platformOf a owl:ObjectProperty ; owl:inverseOf :hasPlatformInstance ; rdfs:comment "平台实例归属平台类型" .
+:hasJobType a owl:ObjectProperty ; rdfs:domain :PlatformInstance ; rdfs:range :JobType ; rdfs:comment "平台实例有作业类型（FlashSync→传输/加工）" .
+:definedBy a owl:ObjectProperty ; owl:inverseOf :hasJobType ; rdfs:comment "作业类型属于平台实例" .
+:instanceOf a owl:ObjectProperty ; rdfs:domain :Job ; rdfs:range :JobType ; rdfs:comment "作业分类（信号链推导）" .
+:inDirectory a owl:ObjectProperty ; rdfs:domain :Job ; rdfs:range :Directory ; rdfs:comment "作业在目录下" .
+
+# 治理三层：Policy(跨平台) → containsRule → Rule(挂平台) → hasRuleImpl → RuleImpl(绑作业类型)
+:covers a owl:ObjectProperty ; rdfs:domain :Policy ; rdfs:range :PlatformType ; rdfs:comment "策略覆盖平台类型（跨平台；设计开发一致性覆盖 dbscript+etl）" .
+:containsRule a owl:ObjectProperty ; rdfs:domain :Policy ; rdfs:range :Rule ; rdfs:comment "治理目标聚合规则" .
+:hasPlatform a owl:ObjectProperty ; rdfs:domain :Rule ; rdfs:range :PlatformType ; rdfs:comment "规则挂平台类型" .
+:hasRuleImpl a owl:ObjectProperty ; rdfs:domain :Rule ; rdfs:range :RuleImpl ; rdfs:comment "规则有多个实现（一 Rule 多实现）" .
+:bindsJobType a owl:ObjectProperty ; rdfs:domain :RuleImpl ; rdfs:range :JobType ; rdfs:comment "实现绑定作业类型" .
+
+# 引用层
+:implements a owl:ObjectProperty ; rdfs:domain :Job ; rdfs:range :Model ; rdfs:comment "作业实现模型（物理表名匹配推导）" .
+:hasVersion a owl:ObjectProperty ; rdfs:domain :Model ; rdfs:range :ModelVersion ; rdfs:comment "模型版本链" .
+:hasIncrement a owl:ObjectProperty ; rdfs:comment "Model→ModelIncrement；Job→CodeIncrement" .
+:matchesIncrement a owl:ObjectProperty ; rdfs:domain :CodeIncrement ; rdfs:range :ModelIncrement ; rdfs:comment "四态匹配（MATCH/AHEAD/BEHIND/DIVERGE）" .
+:releaseBaseline a owl:ObjectProperty ; rdfs:domain :Release ; rdfs:range :Job ; rdfs:comment "最近发布即一致性基线" .
+
+# 实例层
+:generatedBy a owl:ObjectProperty ; rdfs:comment "ScanRun→Job；Finding→ScanRun" .
+:violates a owl:ObjectProperty ; rdfs:domain :Finding ; rdfs:range :Rule ; rdfs:comment "发现违反规则" .
+:traceOf a owl:ObjectProperty ; rdfs:domain :ResolutionTrace ; rdfs:range :ScanRun ; rdfs:comment "解析轨迹属某扫描运行" .
+
+#################################################################
+# 数据属性（Data Properties）
+#################################################################
+:name a owl:DatatypeProperty ; rdfs:range xsd:string .
+:code a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:comment "规则/标准代码" .
+:severity a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:comment "阻断/告警/提示" .
+:stage a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:comment "事中/提交前/流水线" .
+:engine a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:comment "执行引擎/解析器" .
+:version a owl:DatatypeProperty ; rdfs:range xsd:string .
+:style a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:comment "低代码/高代码" .
+:confidence a owl:DatatypeProperty ; rdfs:range xsd:decimal ; rdfs:comment "分类置信度" .
+:matchStatus a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:comment "MATCH/AHEAD/BEHIND/DIVERGE" .
+:commit a owl:DatatypeProperty ; rdfs:range xsd:string .
+:physicalTable a owl:DatatypeProperty ; rdfs:range xsd:string ; rdfs:comment "物理表名（implements 推导键）" .
+
+#################################################################
+# 个体（Individuals · ABox 示意）
+#################################################################
+
+# 平台类型（四类取值）
+:pt-dbscript a :PlatformType ; :name "数据库脚本" ; :code "dbscript" .
+:pt-etl a :PlatformType ; :name "数据ETL" ; :code "etl" .
+:pt-sched a :PlatformType ; :name "数据调度" ; :code "sched" .
+:pt-svc a :PlatformType ; :name "数据服务" ; :code "svc" .
+
+# 平台实例（具体平台）
+:inst-flashsync a :PlatformInstance ; :name "FlashSync" ; :style "低代码" ; :platformOf :pt-etl ; :hasJobType :jt-transfer, :jt-process .
+:inst-bds a :PlatformInstance ; :name "BDS" ; :style "高代码" ; :platformOf :pt-etl ; :hasJobType :jt-bds-process .
+:inst-dolphin a :PlatformInstance ; :name "Dolphin" ; :platformOf :pt-sched .
+
+# 作业类型
+:jt-transfer a :JobType ; :name "传输任务(集成/迁移)" ; :definedBy :inst-flashsync .
+:jt-process a :JobType ; :name "加工任务(真·ETL)" ; :definedBy :inst-flashsync .
+:jt-bds-process a :JobType ; :name "加工任务(高代码)" ; :definedBy :inst-bds .
+:jt-dbscript-model-script a :JobType ; :name "数据库脚本(.sql)" ; rdfs:comment "SQL 域 L3；跨 DataDesign/UDP 生成平台，底层 .sql 统一" .
+
+# 治理目标（Policy · 跨平台）
+:pol-design-consistency a :Policy ; :name "设计开发一致性" ; :covers :pt-dbscript, :pt-etl ; :containsRule :rule-dbscript-field-type, :rule-etl-field-type .
+:pol-script-quality a :Policy ; :name "脚本质量规范" ; :covers :pt-etl ; :containsRule :rule-etl-naming .
+:pol-sql-safety a :Policy ; :name "SQL 安全规范" ; :covers :pt-etl, :pt-dbscript ; :containsRule :rule-etl-danger .
+
+# 规则（Rule · 挂平台类型 + 属 Policy）
+:rule-dbscript-field-type a :Rule ; :name "字段类型一致性" ; :hasPlatform :pt-dbscript ; :hasRuleImpl :impl-dbscript-field-type .
+:rule-etl-field-type a :Rule ; :name "字段类型一致性" ; :hasPlatform :pt-etl ; :hasRuleImpl :impl-etl-transfer-field-type, :impl-etl-process-field-type .
+:rule-etl-naming a :Rule ; :name "命名规范" ; :hasPlatform :pt-etl .
+:rule-etl-danger a :Rule ; :name "高危操作检测" ; :hasPlatform :pt-etl .
+
+# 规则实现（RuleImpl · 绑作业类型）
+:impl-dbscript-field-type a :RuleImpl ; :engine "sql-scanner" ; :version "se-sql 1.8" ; :bindsJobType :jt-dbscript-model-script .
+:impl-etl-transfer-field-type a :RuleImpl ; :engine "flashsync-parser" ; :version "fs-transfer 2.1" ; :bindsJobType :jt-transfer .
+:impl-etl-process-field-type a :RuleImpl ; :engine "bds-parser" ; :version "bds-etl 3.0" ; :bindsJobType :jt-process .
+
+# 引用层（演示）
+:model-M1024 a :Model ; :name "dwd_tax_payment" ; :physicalTable "dwd_tax_payment" ; :hasVersion :mv-v3, :mv-v4 .
+:mv-v3 a :ModelVersion ; :version "v3" .
+:mv-v4 a :ModelVersion ; :version "v4" .
+:rel-0820 a :Release ; :name "REL-0820" ; :commit "b7d2f91" ; :releaseBaseline :jt-process .
