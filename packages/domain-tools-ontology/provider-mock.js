@@ -7,7 +7,7 @@
 //   从 建模空间+代码仓 现场投影本体图（buildGraph），而非依赖硬编码的演示图。
 // 扫描的「执行」不在这里（在 domain-tools-dev 引擎层）；本体只声明规则 + RuleImpl.engine 指向执行器。
 
-import { buildGraph, DEFINITION, traverse, getObject, extractTable, extractEngine, inferJobType } from './ontology.js'
+import { buildGraph, DEFINITION, traverse, getObject, extractTable, extractEngine, inferJobType, typeOf, links as linksOf, listTypes, FUNCTIONS, ACTIONS } from './ontology.js'
 
 // ---------- 实例层（运行产物，回挂本体节点） ----------
 export const FINDINGS = {
@@ -47,6 +47,117 @@ const normType = (t) => String(t || '').toUpperCase().replace(/\s+/g, '')
 export const provider = {
   kind: 'ontology',
   ontVersion: 'v47',
+
+  // ============ 本体四大能力（Palantir Ontology 范式）：type / links / actions / functions ============
+  //   type(typeName)    —— ObjectType 内省：primitive + 属性 schema + 参与的关系类型（out/in）
+  //   links(target)     —— 关系遍历：target 是 ObjectType 名 → 类型级 link 类型；是对象 id → 实例级邻接
+  //   functions()       —— 动力学层 Function 目录（只读语义推理）
+  //   actions()         —— 动力学层 Action 目录（写，gated）
+  type(typeName) {
+    const t = typeOf(typeName)
+    if (!t) return { ok: false, note: '未知 ObjectType: ' + typeName + '（可用 type() 的返回列在 listTypes）' }
+    return { ok: true, ...t, queries: this.queriesFor(typeName) }
+  },
+  listTypes() { return listTypes() },
+  links(target) {
+    const t = typeOf(target)
+    if (t) return { ok: true, kind: 'type', target, links: t.links, note: '这是 ObjectType 级的关系类型；传对象 id（如 inst/dbscript）可得到实例级邻接' }
+    const g = linksOf(DEFINITION, target)
+    if (!g.type) return { ok: false, note: '未知对象或类型: ' + target }
+    return { ok: true, kind: 'object', ...g }
+  },
+  functions() { return { ok: true, count: FUNCTIONS.length, functions: FUNCTIONS } },
+  actions() { return { ok: true, count: ACTIONS.length, actions: ACTIONS } },
+  // 每个 ObjectType 支持的对象类型作用域查询（Policy.getPolicies(platform) 风格）
+  queriesFor(typeName) {
+    const q = {
+      Policy: ['getPolicies(platform)', 'getRules(policy)'],
+      Rule: ['getImplementations(rule)'],
+      PlatformInstance: ['getPolicies()', 'getRules()', 'getJobTypes()'],
+      JobType: ['getPlatform()', 'getPolicies()', 'getRules()'],
+      RuleImpl: ['getJobType()'],
+      Model: ['getFields()', 'getImplementingJobs()'],
+    }
+    return q[typeName] || []
+  },
+  // 对象类型作用域查询：Policy.getPolicies(platform) / Rule.getImplementations(rule) 等 —— 本体关系查询能力
+  // ctx 用于引用层对象（Model 在建模空间+代码仓投影，不在语义层 DEFINITION）
+  objectQuery(objectType, method, arg, ctx = {}) {
+    const g = DEFINITION
+    const resolve = (id) => getObject(g, id)
+    const disp = {
+      Policy: {
+        getPolicies: (platformId) => {
+          const p = resolve(platformId)
+          if (!p || p.type !== 'PlatformInstance') return { ok: false, note: 'getPolicies 需要 PlatformInstance id，如 inst/dbscript' }
+          const ids = traverse(g, platformId, 'covers', { reverse: true })
+          return { ok: true, method: 'Policy.getPolicies', arg: platformId, via: 'covers(逆向) ← ' + p.name, policies: ids.map((id) => { const o = resolve(id); return { id, name: o.name, goal: o.goal } }) }
+        },
+        getRules: (policyId) => {
+          const p = resolve(policyId)
+          if (!p || p.type !== 'Policy') return { ok: false, note: 'getRules 需要 Policy id，如 pol/design-consistency' }
+          const ids = traverse(g, policyId, 'containsRule')
+          return { ok: true, method: 'Policy.getRules', arg: policyId, via: 'containsRule ← ' + p.name, rules: ids.map((id) => { const o = resolve(id); return { id, name: o.name, severity: o.severity, stage: o.stage } }) }
+        },
+      },
+      Rule: {
+        getImplementations: (ruleId) => {
+          const r = resolve(ruleId)
+          if (!r || r.type !== 'Rule') return { ok: false, note: 'getImplementations 需要 Rule id，如 rule/rc@dbscript-field-type' }
+          const ids = traverse(g, ruleId, 'implementedBy')
+          return { ok: true, method: 'Rule.getImplementations', arg: ruleId, via: 'implementedBy ← ' + r.name, impls: ids.map((id) => { const o = resolve(id); return { id, engine: o.engine, ruleset: o.ruleset, jobType: o.jobType } }) }
+        },
+      },
+      PlatformInstance: {
+        getPolicies: (id) => this.objectQuery('Policy', 'getPolicies', id),
+        getRules: (id) => {
+          const p = resolve(id)
+          if (!p || p.type !== 'PlatformInstance') return { ok: false, note: 'getRules 需要 PlatformInstance id' }
+          const ids = traverse(g, id, 'appliesTo', { reverse: true })
+          return { ok: true, method: 'PlatformInstance.getRules', arg: id, via: 'appliesTo(逆向) ← ' + p.name, rules: ids.map((rid) => { const o = resolve(rid); return { id: rid, name: o.name, severity: o.severity, stage: o.stage } }) }
+        },
+        getJobTypes: (id) => {
+          const p = resolve(id)
+          if (!p || p.type !== 'PlatformInstance') return { ok: false, note: 'getJobTypes 需要 PlatformInstance id' }
+          const ids = traverse(g, id, 'hasJobType')
+          return { ok: true, method: 'PlatformInstance.getJobTypes', arg: id, via: 'hasJobType ← ' + p.name, jobTypes: ids.map((jtid) => { const o = resolve(jtid); return { id: jtid, name: o.name } }) }
+        },
+      },
+      JobType: {
+        getPlatform: (id) => {
+          const jt = resolve(id)
+          if (!jt || jt.type !== 'JobType') return { ok: false, note: 'getPlatform 需要 JobType id' }
+          const p = resolve(jt.instance)
+          return { ok: true, method: 'JobType.getPlatform', arg: id, via: 'hasJobType(逆向) ← ' + jt.name, platform: { id: p.id, name: p.name, style: p.style, engine: p.engine } }
+        },
+        getPolicies: (id) => { const jt = resolve(id); return jt && jt.type === 'JobType' ? this.objectQuery('Policy', 'getPolicies', jt.instance) : { ok: false, note: 'getPolicies 需要 JobType id' } },
+        getRules: (id) => { const jt = resolve(id); return jt && jt.type === 'JobType' ? this.objectQuery('PlatformInstance', 'getRules', jt.instance) : { ok: false, note: 'getRules 需要 JobType id' } },
+      },
+      RuleImpl: {
+        getJobType: (id) => {
+          const ri = resolve(id)
+          if (!ri || ri.type !== 'RuleImpl') return { ok: false, note: 'getJobType 需要 RuleImpl id' }
+          return { ok: true, method: 'RuleImpl.getJobType', arg: id, via: 'bindsJobType ← ' + ri.ruleset, jobType: ri.jobType, jobTypeName: resolve(ri.jobType)?.name }
+        },
+      },
+      Model: {
+        getFields: (id, ctx) => {
+          const g2 = ctx && ctx.repo && ctx.modeling ? buildGraph(ctx.repo, ctx.modeling) : g
+          const ids = traverse(g2, id, 'hasField')
+          return { ok: true, method: 'Model.getFields', arg: id, via: 'hasField ← ' + id, fields: ids.map((fid) => { const o = getObject(g2, fid); return { id: fid, name: o.name, datatype: o.datatype, std: o.std } }) }
+        },
+        getImplementingJobs: (id, ctx) => {
+          const g2 = ctx && ctx.repo && ctx.modeling ? buildGraph(ctx.repo, ctx.modeling) : g
+          const ids = traverse(g2, id, 'implements', { reverse: true })
+          return { ok: true, method: 'Model.getImplementingJobs', arg: id, via: 'implements(逆向) ← ' + id, jobs: ids.map((jid) => { const o = getObject(g2, jid); return { id: jid, path: o.path, engine: o.engine, targetTable: o.targetTable } }) }
+        },
+      },
+    }
+    const group = disp[objectType]
+    const fn = group && group[method]
+    if (!fn) return { ok: false, note: '未知对象类型查询: ' + objectType + '.' + method + '（可用: ' + (this.queriesFor(objectType) || []).join(' / ') + '）' }
+    return fn.call(this, arg, ctx)
+  },
 
   // Function：作业分类（特征推理，从 repo 读作业，非查预建 Job）
   classifyJob(job = {}, ctx = {}) {
@@ -233,6 +344,43 @@ export const provider = {
       why,
       note: dir ? '目录锚点：沿 instanceOf 到作业类型后，用 ontology_policies_for / ontology_rules_for 取策略与规则' : '分支锚点：请锚定到具体作业目录（workspace_anchor 传 branch+dir）做对象级推理',
     }
+  },
+
+  // Function：本体推理链（锚定对象 → ObjectType → 关系遍历 → Platform/Policy/Rule → 扫描计划）
+  // 产出「一条推理链路」的节点/边，供 UI 用 X6 渲染（对齐 ER 图容器），也让 Agent 能看到每条边从哪来
+  reasonChain(ctx = {}, path) {
+    const graph = buildGraph(ctx.repo, ctx.modeling)
+    const anchor = this.anchoredObject(ctx)
+    const cls = this.classifyJob({ path }, ctx)
+    if (!cls.ok) return { ok: false, anchor, note: cls.note }
+    const pol = this.policiesFor(cls.jobType)
+    const rl = this.rulesFor(cls.jobType)
+    const nodes = [], edges = []
+    const N = (id, type, name, extra = {}) => nodes.push({ id, type, name, ...extra })
+    const E = (type, from, to, label = type) => edges.push({ type, from, to, label, dir: label === type ? '→' : label })
+    const jobId = 'job/' + path
+    const job = getObject(graph, jobId)
+    if (job) N(jobId, 'Job', job.path.split('/').pop(), { sub: job.path })
+    N(cls.jobType, 'JobType', cls.jobTypeName, { sub: cls.jobType })
+    N(cls.instance, 'PlatformInstance', cls.instanceName, { sub: cls.instance })
+    if (job) E('instanceOf', jobId, cls.jobType, 'instanceOf')
+    E('hasJobType', cls.instance, cls.jobType, 'hasJobType(逆向)')
+    for (const p of (pol.policies || [])) {
+      N(p.id, 'Policy', p.name, { sub: p.id, goal: p.goal })
+      E('covers', p.id, cls.instance, 'covers(逆向)')
+    }
+    for (const r of (rl.rules || [])) {
+      N(r.id, 'Rule', r.name, { sub: r.id, severity: r.severity, stage: r.stage })
+      E('containsRule', r.policy, r.id, 'containsRule')
+      E('appliesTo', r.id, cls.instance, 'appliesTo(逆向)')
+      if (r.impl) {
+        N(r.impl.id, 'RuleImpl', r.impl.ruleset, { sub: r.impl.id, engine: r.impl.engine })
+        E('implementedBy', r.id, r.impl.id, 'implementedBy')
+        E('bindsJobType', r.impl.id, cls.jobType, 'bindsJobType')
+      }
+    }
+    const plan = this.scanPlan(cls.jobType)
+    return { ok: true, anchor: anchor.ok ? anchor : null, classify: cls, nodes, edges, policies: (pol.policies || []), rules: (rl.rules || []), plan, why: anchor.why, derivedFrom: '建模空间+代码仓现场派生 · 沿本体边逐跳' }
   },
 
   // Function：扫描计划（回答「要扫哪些规则、怎么扫」：规则只声明，执行在引擎，RuleImpl.engine 指向执行器）

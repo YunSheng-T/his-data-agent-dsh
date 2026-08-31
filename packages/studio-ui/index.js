@@ -242,6 +242,7 @@ async function route(ctx, req, res, url) {
     }
     const octx = { repo: ctx.hisRepo, modeling: ctx.hisModeling, anchor: anchorSvc }
     const anchored = onto.anchoredObject(octx)
+    const chain = onto.reasonChain ? onto.reasonChain(octx, p) : null
     const cls = onto.classifyJob({ path: p, engine, ast }, octx)
     const pol = cls.ok ? onto.policiesFor(cls.jobType) : null
     const rl = cls.ok ? onto.rulesFor(cls.jobType) : null
@@ -257,7 +258,7 @@ async function route(ctx, req, res, url) {
       chain: (c.kind === 'MATCH-CONFLICT' ? 'R-102 字段类型一致性' : 'R-103 字段缺失/多余') + ' ← 设计开发一致性策略 ← ' + (cls && cls.instanceName) + ' ｜ 基线 ' + (match.releaseBaseline && match.releaseBaseline.modelVersion || ''),
       fix: c.kind === 'MATCH-CONFLICT' ? { column: c.field, from: c.code, to: c.design } : null,
     }))
-    return json(res, 200, { path: p, anchored, classify: cls, policies: pol?.policies ?? [], rules: rl ?? null, scanPlan: plan, match, findings, trace: onto.trace(), context: onto.graphContext(octx, p), ontVersion: onto.ontVersion })
+    return json(res, 200, { path: p, anchored, chain, classify: cls, policies: pol?.policies ?? [], rules: rl ?? null, scanPlan: plan, match, findings, trace: onto.trace(), context: onto.graphContext(octx, p), ontVersion: onto.ontVersion })
   }
   if (url.pathname === '/api/repo/lineage') {
     const p = url.searchParams.get('path')

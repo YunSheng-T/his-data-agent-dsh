@@ -177,3 +177,65 @@ export function getObject(graph, id) {
   const g = graph || DEFINITION
   return g.objects[id] ? { id, ...g.objects[id] } : null
 }
+
+// ---------- 类型目录 · Palantir ObjectType 内省（type()） ----------
+// 本体应当有 type()/links()/actions()/functions() 四种能力（Palantir Ontology 范式）：
+//   type(type)  —— 某 ObjectType 的 primitive + 属性 schema + 参与的关系类型（含方向）
+//   links(id)   —— 从某对象/类型出发沿所有 link 取邻接（关系遍历）
+//   functions() —— 动力学层·Function 目录（只读语义推理）
+//   actions()   —— 动力学层·Action 目录（写，gated）
+
+/** ObjectType 内省：primitive + 属性 schema + 参与的关系类型（out/in） */
+export function typeOf(type) {
+  const schema = OBJECT_TYPES[type]
+  if (!schema) return null
+  const links = []
+  for (const [name, def] of Object.entries(LINK_TYPES)) {
+    if (def.from === type) links.push({ name, from: def.from, to: def.to, direction: 'out' })
+    if (def.to === type) links.push({ name, from: def.from, to: def.to, direction: 'in' })
+  }
+  return { type, primitive: 'Object', props: schema.props, links }
+}
+export function listTypes() {
+  return Object.keys(OBJECT_TYPES).map((t) => typeOf(t)).filter(Boolean)
+}
+
+/** 邻接遍历（links）：id 是 ObjectType 名 → 类型级 link 类型；id 是对象 id → 实例级邻接 */
+export function links(graph, id) {
+  const g = graph || DEFINITION
+  const obj = g.objects[id] || null
+  const out = []
+  for (const l of g.links) {
+    if (l.from === id) {
+      const t = g.objects[l.to]
+      out.push({ link: l.type, direction: 'out', from: id, to: l.to, toType: t ? t.type : null, toName: t ? (t.name ?? t.path ?? t.code ?? l.to) : l.to })
+    }
+    if (l.to === id) {
+      const f = g.objects[l.from]
+      out.push({ link: l.type, direction: 'in', from: l.from, to: id, fromType: f ? f.type : null, fromName: f ? (f.name ?? f.path ?? f.code ?? l.from) : l.from })
+    }
+  }
+  return { id, type: obj ? obj.type : null, name: obj ? (obj.name ?? obj.path ?? obj.code ?? id) : null, links: out }
+}
+
+// ---------- 动力学层声明（actions() / functions() 目录） ----------
+export const FUNCTIONS = [
+  { name: 'anchored_object', risk: 'read', returns: 'ObjectType + 直接关系 + jobTypes', purpose: '当前锚定的对象是什么' },
+  { name: 'type', risk: 'read', returns: 'ObjectType schema + link 类型', purpose: '对象类型内省' },
+  { name: 'links', risk: 'read', returns: '邻接对象（关系遍历）', purpose: '沿本体关系遍历' },
+  { name: 'object_query', risk: 'read', returns: '对象类型作用域关系查询', purpose: 'Policy.getPolicies(platform) / Rule.getImplementations 等' },
+  { name: 'classify_job', risk: 'read', returns: '作业类型 + 平台 + 置信度', purpose: '作业分类（特征推理）' },
+  { name: 'policies_for', risk: 'read', returns: '平台适用的策略', purpose: 'covers 逆向查策略（Policy.getPolicies 糖）' },
+  { name: 'rules_for', risk: 'read', returns: '规则 + RuleImpl', purpose: 'appliesTo 逆向查规则（Rule.getRules 糖）' },
+  { name: 'scan_plan', risk: 'read', returns: '可执行规则 + 引擎 + 怎么扫', purpose: '要扫哪些规则、怎么扫' },
+  { name: 'consistency_check', risk: 'read', returns: '四态一致性对账', purpose: '设计态↔开发态一致性对账' },
+  { name: 'lineage_upstream', risk: 'read', returns: '上游血缘', purpose: '来源表 ← 生产作业' },
+  { name: 'lineage_downstream', risk: 'read', returns: '下游血缘', purpose: '下游影响面' },
+  { name: 'impact_check', risk: 'read', returns: '实现该模型的作业', purpose: '模型变更影响面' },
+  { name: 'explain_finding', risk: 'read', returns: '归因链', purpose: '发现回溯到规则/策略' },
+  { name: 'functions', risk: 'read', returns: 'Function 目录', purpose: '动力学层·只读语义推理清单' },
+  { name: 'actions', risk: 'read', returns: 'Action 目录', purpose: '动力学层·写操作清单' },
+]
+export const ACTIONS = [
+  { name: 'propose', risk: 'knowledge-write', purpose: '提交规则/类型提案、回写归类断言、DIVERGE 裁决（gated）' },
+]
