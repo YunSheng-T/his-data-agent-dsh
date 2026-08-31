@@ -96,7 +96,7 @@ export function buildDefinitions(p, { repo, modeling, anchor } = {}) {
       parameters: { type: 'object', properties: { jobType: S('string', { description: '作业类型 id，如 jt/schema-change' }) }, required: ['jobType'] },
       output: jsonOut, execute: (args) => p.rulesFor(args.jobType) },
     { name: 'get_scan_plan', risk: 'read', category: FUNC,
-      description: '【Ontology Function · 本体语义推理】回答「要扫哪些规则、怎么扫」：取作业类型适用且有实现（RuleImpl）的规则清单 + 执行引擎（RuleImpl.engine/ruleset）+ 怎么扫（一致性对账 check_consistency / 规范性·高危 code_lint·danger_scan·partition_check）。规则只声明、执行在引擎。先 get_anchored_object 拿 jobTypes，再本函数决定扫什么、怎么扫。本体的只读推理，非普通执行工具',
+      description: '【Ontology Function · 本体语义推理·最后收口】回答「要扫哪些规则、怎么扫」：取作业类型适用且有实现（RuleImpl）的规则清单 + 执行引擎（RuleImpl.engine/ruleset）+ 怎么扫（一致性对账 check_consistency / 规范性·高危 code_lint·danger_scan·partition_check）。**必须先分层取全策略与规则再调用**：get_anchored_object → policy_get_policies（策略清单）→ 逐策略 policy_get_rules（策略→规则）→ rule_get_implementations（规则→实现），拿到的规则要挂在所属策略下讲，本函数只是把「有实现的规则 + 引擎」收口，不能替代策略层查询。规则只声明、执行在引擎。本体的只读推理，非普通执行工具',
       parameters: { type: 'object', properties: { jobType: S('string', { description: '作业类型 id，如 jt/schema-change' }) }, required: ['jobType'] },
       output: jsonOut, execute: (args) => p.scanPlan(args.jobType) },
     { name: 'check_consistency', risk: 'read', category: FUNC,

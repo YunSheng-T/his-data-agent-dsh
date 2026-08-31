@@ -12,10 +12,19 @@ import { scanVerdict } from './provider-cicd.js'
 const jsonOut = { schema: { type: 'object' }, render: (_a, v) => [{ type: 'text', text: JSON.stringify(v, null, 2) }] }
 const pathParam = { path: { type: 'string', description: '仓内相对路径，如 etl/dwd/dwd_tax_declaration.etl 或 dag/dwd_tax_declaration.dag' } }
 
+// 读取作业文本：view=working 读工作区；committed（默认）读已提交视图，
+// 已提交视图缺失时自动回退工作区（未提交的新作业也能被扫描），并标注实际视图
 function mustRead(repo, path, view) {
-  const text = view === 'working' ? repo.readWorking(path) : repo.readCommitted(repo.currentBranch(), path)
-  if (text == null) throw new Error(`文件不存在于${view === 'working' ? '工作区' : '当前分支已提交视图'}: ${path}`)
-  return text
+  if (view === 'working') {
+    const t = repo.readWorking(path)
+    if (t == null) throw new Error(`文件不存在于工作区: ${path}`)
+    return { text: t, view: 'working' }
+  }
+  const committed = repo.readCommitted(repo.currentBranch(), path)
+  if (committed != null) return { text: committed, view: 'committed' }
+  const working = repo.readWorking(path)
+  if (working == null) throw new Error(`文件不存在于已提交视图（且工作区也没有）: ${path}`)
+  return { text: working, view: 'working', note: '已提交视图缺失，回退扫描工作区未提交态（提交后才有流水线权威报告）' }
 }
 
 /** 作业 → 模型：@model 埋点优先，targetTable 尾名兜底（与 jobsForModel 同规则） */
@@ -306,12 +315,12 @@ function readTools({ repo, dryrun, modeling, cicd }) {
     {
       name: 'job_read', risk: 'read',
       description: '读取作业文件并返回结构化解析（注解头/来源表/目标表/列映射/调度参数）。view=committed 读已提交视图（默认），view=working 读工作区未提交态',
-      parameters: { type: 'object', properties: { ...pathParam, view: { type: 'string', enum: ['committed', 'working'], description: 'committed（默认）| working' } }, required: ['path'] },
+      parameters: { type: 'object', properties: { ...pathParam, view: { type: 'string', enum: ['committed', 'working'], description: 'committed（默认）| working（工作区未提交态）。已提交视图缺失时自动回退工作区' } }, required: ['path'] },
       output: jsonOut,
       execute: async ({ path, view }) => {
-        const text = mustRead(repo, path, view)
-        const parsed = path.endsWith('.dag') ? parseDag(text) : parseEtl(text)
-        return { path, view: view ?? 'committed', kind: path.endsWith('.dag') ? 'dag' : 'etl', parsed, text }
+        const rd = mustRead(repo, path, view)
+        const parsed = path.endsWith('.dag') ? parseDag(rd.text) : parseEtl(rd.text)
+        return { path, view: rd.view, kind: path.endsWith('.dag') ? 'dag' : 'etl', parsed, text: rd.text, note: rd.note }
       },
     },
 
@@ -321,7 +330,7 @@ function readTools({ repo, dryrun, modeling, cicd }) {
       parameters: { type: 'object', properties: { ...pathParam, column: { type: 'string', description: '目标列名（可选）' } }, required: ['path'] },
       output: jsonOut,
       execute: async ({ path, column }) => {
-        const parsed = parseEtl(mustRead(repo, path))
+        const parsed = parseEtl(mustRead(repo, path).text)
         if (!column) return { path, targetTable: parsed.targetTable, columns: parsed.columns }
         const hit = locateColumn(parsed, column)
         if (!hit) throw new Error(`列不存在: ${column}（现有列: ${parsed.columns.map((c) => c.alias).filter(Boolean).join(', ')}）`)
@@ -370,12 +379,13 @@ function readTools({ repo, dryrun, modeling, cicd }) {
     {
       name: 'code_lint', risk: 'read',
       description: 'ETL/调度代码检查：返回结构化问题清单（error/warn）。pass=false（有 error）时编排不变量要求不得生成 .dag、不得进入提交审批',
-      parameters: { type: 'object', properties: { ...pathParam, view: { type: 'string', enum: ['committed', 'working'], description: 'committed（默认）| working（工作区未提交态）' } }, required: ['path'] },
+      parameters: { type: 'object', properties: { ...pathParam, view: { type: 'string', enum: ['committed', 'working'], description: 'committed（默认）| working（工作区未提交态）。已提交视图缺失时自动回退工作区（未提交新作业也能扫）' } }, required: ['path'] },
       output: jsonOut,
       execute: async ({ path, view }) => {
-        const text = mustRead(repo, path, view)
+        const rd = mustRead(repo, path, view)
+        const text = rd.text
         const r = path.endsWith('.dag') ? lintDag(text, parseDag(text)) : lintEtl(text, parseEtl(text))
-        return { path, ...r }
+        return { path, view: rd.view, note: rd.note, ...r }
       },
     },
 
@@ -385,7 +395,8 @@ function readTools({ repo, dryrun, modeling, cicd }) {
       parameters: { type: 'object', properties: { ...pathParam, view: { type: 'string', enum: ['committed', 'working'], description: 'committed（默认）| working（工作区未提交态）' } }, required: ['path'] },
       output: jsonOut,
       execute: async ({ path, view }) => {
-        const p = parseEtl(mustRead(repo, path, view))
+        const rd = mustRead(repo, path, view)
+        const p = parseEtl(rd.text)
         const ok = !!p.partition && p.usesPartitionFilter
         return { path, ok, insertMode: p.insertMode, partition: p.partition, partitionFilterInWhere: p.usesPartitionFilter, advice: ok ? null : 'INSERT 需指定 PARTITION 且 WHERE 按 dt 过滤' }
       },
@@ -397,7 +408,8 @@ function readTools({ repo, dryrun, modeling, cicd }) {
       parameters: { type: 'object', properties: { ...pathParam, view: { type: 'string', enum: ['committed', 'working'], description: 'committed（默认）| working（工作区未提交态）' } }, required: ['path'] },
       output: jsonOut,
       execute: async ({ path, view }) => {
-        const p = parseEtl(mustRead(repo, path, view))
+        const rd = mustRead(repo, path, view)
+        const p = parseEtl(rd.text)
         const hits = []
         if (p.hasDrop) hits.push('DROP TABLE')
         if (p.hasTruncate) hits.push('TRUNCATE')
@@ -413,8 +425,8 @@ function readTools({ repo, dryrun, modeling, cicd }) {
       parameters: { type: 'object', properties: { ...pathParam, view: { type: 'string', enum: ['committed', 'working'], description: 'committed（默认）| working（工作区未提交态）' }, sampleRows: { type: 'number', description: '采样行数（受 Provider 上限截断）' } }, required: ['path'] },
       output: jsonOut,
       execute: async ({ path, view, sampleRows }) => {
-        const sql = mustRead(repo, path, view)
-        return { path, ...(await dryrun.dryrun({ sql, parsed: parseEtl(sql), sampleRows })) }
+        const rd = mustRead(repo, path, view)
+        return { path, view: rd.view, note: rd.note, ...(await dryrun.dryrun({ sql: rd.text, parsed: parseEtl(rd.text), sampleRows })) }
       },
     },
   ]
