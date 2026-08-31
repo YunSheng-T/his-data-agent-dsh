@@ -33,7 +33,7 @@ check('引用层含 建模空间的模型投影', Object.keys(g.objects).some((i
 check('引用层含 代码仓作业投影', Object.keys(g.objects).some((id) => id.startsWith('job/') && g.objects[id].type === 'Job'))
 
 // 2. 工具归位（Function/Action）—— 本体四大能力 type/links/functions/actions 是一等 Function
-const OBJ_Q = ['Policy.getPolicies', 'Policy.getRules', 'Rule.getImplementations', 'PlatformInstance.getPolicies', 'PlatformInstance.getRules', 'PlatformInstance.getJobTypes', 'JobType.getPlatform', 'RuleImpl.getJobType', 'Model.getFields', 'Model.getImplementingJobs']
+const OBJ_Q = ['ontology_policy_get_policies', 'ontology_policy_get_rules', 'ontology_rule_get_implementations', 'ontology_platform_get_policies', 'ontology_platform_get_rules', 'ontology_platform_get_job_types', 'ontology_job_type_get_platform', 'ontology_rule_impl_get_job_type', 'ontology_model_get_fields', 'ontology_model_get_implementing_jobs']
 const FUNC = ['ontology_anchored_object', 'ontology_type', 'ontology_links', 'ontology_functions', 'ontology_actions', 'ontology_classify_job', 'ontology_policies_for', 'ontology_rules_for', 'ontology_scan_plan', 'ontology_consistency_check', 'ontology_lineage_upstream', 'ontology_lineage_downstream', 'ontology_impact_check', 'ontology_explain_finding']
 check('14 通用 Function + 10 对象类型查询 + 1 Action 注册', [...FUNC, ...OBJ_Q, 'ontology_propose'].every((n) => tools.has(n)))
 check('Function risk=read', FUNC.every((n) => tools.get(n)?.risk === 'read'))
@@ -50,13 +50,13 @@ check('links(jt/schema-change) 实例级邻接 → PlatformInstance（hasJobType
 check('functions() 目录含 type/links/scan_plan', (() => { const f = call('ontology_functions', {}); return f.ok === true && f.functions.some((x) => x.name === 'type') && f.functions.some((x) => x.name === 'links') && f.functions.some((x) => x.name === 'scan_plan') })())
 check('actions() 目录含 propose(gated)', (() => { const a = call('ontology_actions', {}); return a.ok === true && a.actions.some((x) => x.name === 'propose') })())
 // 对象类型作用域查询（具名工具，名即 ObjectType.method）：Policy.getPolicies(platform) / Policy.getRules(policy) / Rule.getImplementations(rule)
-const qP = call('Policy.getPolicies', { platform: 'inst/dbscript' })
+const qP = call('ontology_policy_get_policies', { platform: 'inst/dbscript' })
 check('Policy.getPolicies(inst/dbscript) 沿 covers 逆向取平台策略', qP.ok === true && (qP.policies || []).length >= 3 && (qP.policies || []).some((p) => p.id === 'pol/design-consistency'), JSON.stringify(qP.policies))
-const qR = call('Policy.getRules', { policy: 'pol/design-consistency' })
+const qR = call('ontology_policy_get_rules', { policy: 'pol/design-consistency' })
 check('Policy.getRules(pol/design-consistency) 沿 containsRule 取规则', qR.ok === true && (qR.rules || []).some((r) => r.id === 'rule/rc@dbscript-field-type'), JSON.stringify(qR.rules))
-const qI = call('Rule.getImplementations', { rule: 'rule/rc@dbscript-field-type' })
+const qI = call('ontology_rule_get_implementations', { rule: 'rule/rc@dbscript-field-type' })
 check('Rule.getImplementations → RuleImpl se-sql 1.8（engine 指向执行器）', qI.ok === true && (qI.impls || []).some((i) => i.ruleset === 'se-sql 1.8' && i.engine === 'sql-scanner'), JSON.stringify(qI.impls))
-const qJP = call('JobType.getPlatform', { jobType: 'jt/schema-change' })
+const qJP = call('ontology_job_type_get_platform', { jobType: 'jt/schema-change' })
 check('JobType.getPlatform(jt/schema-change) → inst/dbscript', qJP.ok === true && qJP.platform && qJP.platform.id === 'inst/dbscript', JSON.stringify(qJP.platform))
 // 本体推理入口：锚定驱动——先找「当前锚定的对象」（读 workspace 锚点，非手传 path）
 const ao = call('ontology_anchored_object', {})

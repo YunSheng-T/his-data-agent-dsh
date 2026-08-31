@@ -392,6 +392,25 @@ let auditEvents = [];
 const $ = (s) => document.querySelector(s);
 const api = (p, o) => fetch(p, o).then((r) => r.json());
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+// 本体对象类型作用域查询工具：工具名是 snake_case（LLM schema 不允许点号），
+// 显示时转回 ObjectType.method(arg) 形式 —— 会话流打印出 Policy.getPolicies(inst/dbscript)。
+const ONTO_Q = {
+  ontology_policy_get_policies: ['Policy', 'getPolicies'],
+  ontology_policy_get_rules: ['Policy', 'getRules'],
+  ontology_rule_get_implementations: ['Rule', 'getImplementations'],
+  ontology_platform_get_policies: ['PlatformInstance', 'getPolicies'],
+  ontology_platform_get_rules: ['PlatformInstance', 'getRules'],
+  ontology_platform_get_job_types: ['PlatformInstance', 'getJobTypes'],
+  ontology_job_type_get_platform: ['JobType', 'getPlatform'],
+  ontology_rule_impl_get_job_type: ['RuleImpl', 'getJobType'],
+  ontology_model_get_fields: ['Model', 'getFields'],
+  ontology_model_get_implementing_jobs: ['Model', 'getImplementingJobs'],
+};
+function ontoToolLabel(name, argsObj) {
+  const m = ONTO_Q[name];
+  const argVal = argsObj && (argsObj.platform || argsObj.policy || argsObj.rule || argsObj.impl || argsObj.jobType || argsObj.model || '');
+  return m ? m[0] + '.' + m[1] + '(' + argVal + ')' : name;
+}
 function toast(m) { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(t._tm); t._tm = setTimeout(() => t.classList.remove('show'), 2200); }
 
 const MODEL_TABS = [['design','模型设计'],['er','ER 图'],['ddl','DDL'],['publish','资产发布']];
@@ -1212,8 +1231,12 @@ function renderEvents(events) {
       if (busy) showThinking('模型生成中');
     } else if (e.type === 'tool/call') {
       showThinking(`调用工具 ${d.name}`);
-      const isOnto = d.name.startsWith('ontology_') || (typeof d.name === 'string' && /^[A-Z][A-Za-z]+\./.test(d.name));
-      pendingTermLines.push([`${isOnto ? '$ ⬢ [ontology-function]' : '$'} ${d.name} ${(typeof d.arguments === 'string' ? d.arguments : JSON.stringify(d.arguments ?? '')).slice(0, 120)}`]);
+      const isOnto = d.name.startsWith('ontology_');
+      let argObj = {}; try { argObj = typeof d.arguments === 'string' ? JSON.parse(d.arguments || '{}') : (d.arguments ?? {}); } catch {}
+      const label = ontoToolLabel(d.name, argObj);
+      const argTxt = Object.keys(argObj).length ? JSON.stringify(argObj) : '';
+      const isOntoQ = d.name.startsWith('ontology_policy') || d.name.startsWith('ontology_rule') || d.name.startsWith('ontology_platform') || d.name.startsWith('ontology_job_type') || d.name.startsWith('ontology_rule_impl') || d.name.startsWith('ontology_model');
+      pendingTermLines.push([`${isOnto ? '$ ⬢ [ontology-function]' : '$'} ${label} ${argTxt}`]);
     } else if (e.type === 'tool/code-dispatch') {
       showThinking(`工具 ${d.name}`);
       pendingTermLines.push([`  ↳ ${d.name}(${(typeof d.arguments === 'string' ? d.arguments : JSON.stringify(d.arguments ?? '')).slice(0, 90)})`, d.isError]);
