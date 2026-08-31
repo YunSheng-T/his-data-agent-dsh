@@ -850,24 +850,25 @@ function viewTest(f) {
 async function viewScriptScan(f) {
   const d = await api('/api/repo/onto-scan?path=' + encodeURIComponent(active.file));
   if (d.error) { $('#ws-body').innerHTML = '<p class="note">' + esc(d.error) + '</p>'; return; }
-  const cls = d.classify, pol = d.policies || [], filtered = d.filtered || [], rl = d.rules, match = d.match, findings = d.findings || [], trace = d.trace || [];
+  const cls = d.classify, pol = d.policies || [], rl = d.rules, match = d.match, findings = d.findings || [], trace = d.trace || [];
   if (!cls || !cls.ok) { $('#ws-body').innerHTML = '<p class="note">' + esc((cls && cls.note) || '本体分类失败（fail-closed 转人工归类）') + '</p>'; return; }
   let h = '<div class="sec-title">本体驱动扫描 <span class="tlabel">' + esc(active.file) + '</span></div>';
   const rlb = match && match.releaseBaseline ? match.releaseBaseline : null;
-  const stats = '策略 <b>' + (pol.length + filtered.length) + '</b>（命中 ' + pol.length + ' · 过滤 ' + filtered.length + '）· 规则 <b>' + (rl ? rl.count : '—') + '</b> · RuleImpl <b>' + (rl ? rl.implVersion : '—') + '</b> · 基线 <b>' + (rlb ? rlb.release : '—') + '</b>（模型 ' + (rlb ? rlb.modelVersion : '—') + '）· 本体 <b>' + (d.ontVersion || '—') + '</b> 快照';
+  const impls = (rl && rl.rules ? rl.rules.map(function (r) { return r.impl ? r.impl.ruleset : null }).filter(Boolean) : []);
+  const implUnique = impls.length ? impls.filter(function (v, i) { return impls.indexOf(v) === i }).join(' / ') : '—';
+  const stats = '策略 <b>' + pol.length + '</b> · 规则 <b>' + (rl ? rl.ruleCount : '—') + '</b> · RuleImpl <b>' + implUnique + '</b> · 基线 <b>' + (rlb ? rlb.release : '—') + '</b>（模型 ' + (rlb ? rlb.modelVersion : '—') + '）· 本体 <b>' + (d.ontVersion || '—') + '</b> 快照';
   h += '<div class="onto-head"><span class="onto-badge">本体类型 · ' + esc(cls.instanceOf || cls.jobTypeName) + '<span class="conf">置信 ' + (cls.confidence || '—') + '</span></span><span class="onto-stats">' + stats + '</span></div>';
   // 链路图（Job → instanceOf → JobType 继承 → appliesTo → 策略 → containsRule → 规则）
-  const polNodes = pol.map(function (p) { return '<div class="lnk-node pol"><div class="lnk-n">' + esc(p.name) + '</div><div class="lnk-d">' + (p.bound === 'direct' ? '绑定在此类型' : '继承获得') + ' · ' + p.ruleCount + ' 规则' + (p.override ? ' · ' + p.override + ' 覆盖' : '') + '</div></div>' }).join('');
-  const filtNodes = filtered.map(function (p) { return '<div class="lnk-node pol off"><div class="lnk-n">' + esc(p.name) + '</div><div class="lnk-d">被过滤 · ' + esc(p.reason) + ' · ' + p.ruleCount + ' 规则</div></div>' }).join('');
-  const ruleNodes = (rl && rl.rules ? rl.rules.slice(0, 4) : []).map(function (r) { return '<div class="lnk-node rl ' + (r.finding && String(r.finding).indexOf('F-1') === 0 ? 'hot' : '') + '"><div class="lnk-n">' + esc(r.id) + ' ' + esc(r.name) + '</div><div class="lnk-d">' + (r.finding ? '命中 ' + r.finding : '') + ' · ' + esc(r.severity) + ' · impl ' + esc(r.impl) + '</div></div>' }).join('');
+  const polNodes = pol.map(function (p) { return '<div class="lnk-node pol"><div class="lnk-n">' + esc(p.name) + '</div><div class="lnk-d">' + esc(p.goal || '') + '</div></div>' }).join('');
+  const ruleNodes = (rl && rl.rules ? rl.rules.slice(0, 5) : []).map(function (r) { return '<div class="lnk-node rl"><div class="lnk-n">' + esc(r.name) + '</div><div class="lnk-d">' + esc(r.severity) + ' · ' + esc(r.stage) + ' · impl ' + (r.impl ? esc(r.impl.ruleset) : '无') + '</div></div>' }).join('');
   h += '<div class="tlabel" style="margin:4px 0 8px">本体匹配与关系链路 · 命中了哪个本体节点、沿哪条关系边找到策略规则</div><div class="lnk-wrap">';
   h += '<div class="lnk-col"><div class="lnk-node"><div class="lnk-t">Job · 开发态投影</div><div class="lnk-n">' + esc(active.file.split('/').pop()) + '</div><div class="lnk-d">' + esc(active.file.split('/')[0]) + '</div></div></div>';
   h += '<div class="lnk-edge"><b>instanceOf</b><i>→</i><span>① 分类</span></div>';
-  h += '<div class="lnk-col"><div class="lnk-node tiny"><div class="lnk-n">数据库脚本平台</div></div><div class="lnk-inh">↓ 继承</div><div class="lnk-node tiny"><div class="lnk-n">DDL 脚本</div></div><div class="lnk-inh">↓ 继承</div><div class="lnk-node tiny hit"><div class="lnk-n">' + esc(cls.jobTypeName) + ' ✓ 命中</div></div></div>';
+  h += '<div class="lnk-col"><div class="lnk-node tiny"><div class="lnk-n">' + esc(cls.instanceName || '平台实例') + '</div><div class="lnk-d">' + esc(cls.platformStyle || '') + '</div></div><div class="lnk-inh">↓ hasJobType</div><div class="lnk-node tiny hit"><div class="lnk-n">' + esc(cls.jobTypeName) + ' ✓ 命中</div></div></div>';
   h += '<div class="lnk-edge"><b>appliesTo</b><i>→</i><span>② 策略</span></div>';
-  h += '<div class="lnk-col">' + polNodes + filtNodes + '</div>';
+  h += '<div class="lnk-col">' + polNodes + '</div>';
   h += '<div class="lnk-edge"><b>containsRule</b><i>→</i><span>③ 规则</span></div>';
-  h += '<div class="lnk-col">' + ruleNodes + (rl && rl.count > 4 ? '<div class="lnk-node"><div class="lnk-d">… 共 ' + rl.count + ' 条 · 计划快照随 ScanRun 存档 · 本体 ' + (d.ontVersion || '') + '</div></div>' : '') + '</div>';
+  h += '<div class="lnk-col">' + ruleNodes + (rl && rl.ruleCount > 5 ? '<div class="lnk-node"><div class="lnk-d">… 共 ' + rl.ruleCount + ' 条 · 本体 ' + (d.ontVersion || '') + '</div></div>' : '') + '</div>';
   h += '</div>';
   // 解析轨迹（折叠列表）
   h += '<div class="tlabel" style="margin:14px 0 8px">处理过程 · 解析轨迹（Resolution Trace）——查了什么本体、怎么找到规则、排除了什么</div>';
@@ -883,15 +884,9 @@ async function viewScriptScan(f) {
   // 版本区间对账表
   h += '<div class="tlabel" style="margin:14px 0 8px">版本区间增量匹配 · 设计增量 × 代码增量（字段级对账）</div>';
   if (match) {
-    h += '<div class="inc-wrap"><div class="inc-col"><h6>设计增量 · 模型 ' + (match.interval ? match.interval.from : 'v3') + '→' + (match.interval ? match.interval.to : 'v4') + '</h6>';
-    (match.fields || []).forEach(function (fr) {
-      const cf = (match.conflicts || []).find(function (c) { return c.field === fr.field });
-      const st = cf ? (cf.kind === 'MATCH-CONFLICT' ? 'bad' : cf.kind === 'BEHIND' ? 'warn2' : 'ok2') : 'ok2';
-      const tag = cf ? (cf.kind === 'MATCH-CONFLICT' ? '✗ 类型冲突' : cf.kind === 'BEHIND' ? '⊘ 未实现' : '✓') : '✓';
-      h += '<div class="inc-row ' + st + '">' + esc(fr.field) + ' · ' + tag + ' 设计 ' + esc(fr.design || '—') + ' / 代码 ' + esc(fr.code || '—') + '</div>';
-    });
-    h += '</div><div class="inc-col mid"><h6>对账结论</h6><div class="inc-row">' + esc(String(match.status || '').replace(/[-_]/g, ' ')) + '</div><div class="inc-row dim2">得分 ' + (match.score || '—') + ' · 本体 ' + (d.ontVersion || '') + '</div></div></div>';
-  } else { h += '<p class="note">一致性前置未通过（无匹配模型/无基线）——见轨迹④。</p>'; }
+    const rows = (match.conflicts || []).map(function (c) { const st = c.kind === 'MATCH-CONFLICT' ? 'bad' : c.kind === 'BEHIND' ? 'warn2' : 'ok2'; const tag = c.kind === 'MATCH-CONFLICT' ? '✗ 类型冲突' : c.kind === 'BEHIND' ? '⊘ 未实现' : '✓'; return '<div class="inc-row ' + st + '">' + esc(c.field) + ' · ' + tag + ' 设计 ' + esc(c.design || '—') + ' / 代码 ' + esc(c.code || '—') + '</div>'; }).join('');
+    h += '<div class="inc-wrap"><div class="inc-col"><h6>一致性对账 · ' + esc(match.status || '') + '</h6>' + rows + '</div><div class="inc-col mid"><h6>基线</h6><div class="inc-row">' + (rlb ? rlb.release + '（模型 ' + rlb.modelVersion + '）' : '—') + '</div><div class="inc-row dim2">implements ' + (match.implements ? match.implements.physicalTable : '—') + '</div></div></div>';
+  } else { h += '<p class="note">一致性前置未通过（无匹配模型/无基线）。</p>'; }
   // 发现（Findings · 回挂本体节点）
   h += '<div class="tlabel" style="margin:14px 0 8px">发现（Findings · 回挂本体节点）</div>';
   if (!findings.length) h += '<p class="note">无发现 · 规则全部通过。</p>';
