@@ -1,14 +1,16 @@
-// @his/domain-tools-ontology — definitions.js：本体驱动扫描工具域（V14/V15）
-// risk 标注沿用 P0 约定（挂在 definition 上，审批插件只认标注）：
-//   classify/policies/rules/match_increment/explain 只读自动；propose gated（写本体提案/断言）。
-// 设计（SQL扫描本体接入设计 v1.4）：本体是定义层（扫什么、为什么），扫描引擎是执行层（怎么扫）。
-// 场景锚定数据库脚本平台（dbscript）；ETL 内 SQL 片段随 ETL 作业整体扫描，不走本场景。
+// @his/domain-tools-ontology — definitions.js：数据开发本体的动力学层（Action + Function）
+//
+// 五原语归位：语义层在 ontology.js（Object + Link），本文件把「可执行能力」归位——
+//   Function（只读计算，risk=read）：classify_job / policies_for / rules_for / consistency_check / explain_finding
+//   Action（写，gated）：propose
+// 工具绑定各自操作的对象类型（classify 操作 Job、consistency_check 操作 Job×Model 关系），
+// 扫描的执行不在这里（引擎层 domain-tools-dev）。
 
 const S = (type, extra = {}) => ({ type, ...extra })
 const PATH_ARG = { path: S('string', { description: '仓内相对路径，如 dbscript/alter_dwd_tax_payment_v4.sql' }) }
 const jsonOut = { schema: { type: 'object' }, render: (_a, v) => [{ type: 'text', text: JSON.stringify(v, null, 2) }] }
 
-/** 极简 AST 特征检测（演示）：ALTER ADD COLUMNS → 表结构变更；UPDATE/INSERT INTO → DML 订正 */
+/** 极简 AST 特征检测（演示）：ALTER ADD COLUMNS → 表结构变更；UPDATE/INSERT INTO → DML */
 function detectAst(text) {
   if (/ADD\s+COLUMNS/i.test(text)) return { alterAddColumns: true }
   if (/\b(UPDATE|INSERT\s+INTO)\b/i.test(text)) return { dml: true }
@@ -22,81 +24,53 @@ export function buildDefinitions(p, { repo } = {}) {
   }
   return [
     {
-      name: 'ontology_classify', risk: 'read',
-      description: '本体作业分类（只读）：输入作业路径/内容，输出作业类型本体节点 + 置信度 + 分类信号明细（分包→元数据→AST 三级）与排除项；分类失败/冲突 → fail-closed 转人工归类',
-      parameters: {
-        type: 'object',
-        properties: {
-          ...PATH_ARG,
-          engine: S('string', { description: '作业引擎，如 Hive SQL' }),
-          ast: S('object', { description: '可选：已解析的 AST 特征（alterAddColumns/dml），缺省由工具从文件内容检测' }),
-        },
-        required: ['path'],
-      },
+      name: 'ontology_classify_job', risk: 'read',
+      description: '【Function · 作业分类】把作业归入作业类型（Job →instanceOf→ JobType）：按目录/引擎/AST 特征推理，返回作业类型 + 平台实例 + 置信度。分类失败 fail-closed 转人工归类',
+      parameters: { type: 'object', properties: { ...PATH_ARG, engine: S('string', { description: '引擎，如 Hive SQL' }), ast: S('object', { description: '可选：AST 特征（alterAddColumns/dml），缺省从文件内容检测' }) }, required: ['path'] },
       output: jsonOut,
-      execute: (args) => p.classify({ ...args, ast: args.ast ?? detectAst(readText(args.path) ?? '') }),
+      execute: (args) => p.classifyJob({ path: args.path, engine: args.engine, ast: args.ast ?? detectAst(readText(args.path) ?? '') }),
     },
     {
-      name: 'ontology_policies', risk: 'read',
-      description: '本体策略解析（只读）：输入作业类型节点 + 上下文，输出适用策略集（含继承链合并 / 子类型覆盖 / 租户条件过滤）——回答"这类作业该套哪些治理策略"',
-      parameters: {
-        type: 'object',
-        properties: {
-          jobType: S('string', { description: '作业类型本体节点 id，如 schema-change' }),
-          tenant: S('string', { description: '租户，默认 finance' }),
-        },
-        required: ['jobType'],
-      },
+      name: 'ontology_policies_for', risk: 'read',
+      description: '【Function · 策略解析】取作业类型适用的治理目标（JobType → PlatformInstance →covers→ Policy，跨平台），返回策略集',
+      parameters: { type: 'object', properties: { jobType: S('string', { description: '作业类型 id，如 jt/schema-change' }) }, required: ['jobType'] },
       output: jsonOut,
-      execute: (args) => p.policies(args.jobType, { ...args }),
+      execute: (args) => p.policiesFor(args.jobType),
     },
     {
-      name: 'ontology_rules', risk: 'read',
-      description: '本体规则装配（只读）：输入策略节点，输出规则清单：规则语义、严重度、生效阶段、执行器标识(RuleImpl)、适用对象——规则只声明不执行，执行归扫描引擎',
-      parameters: {
-        type: 'object',
-        properties: { policies: S('array', { items: S('string'), description: '策略 id 列表' }) },
-        required: ['policies'],
-      },
+      name: 'ontology_rules_for', risk: 'read',
+      description: '【Function · 规则装配】取平台实例适用的规则及其实现（PlatformInstance →appliesTo→ Rule →implementedBy→ RuleImpl，按作业类型匹配实现）。规则只声明，执行在扫描引擎',
+      parameters: { type: 'object', properties: { jobType: S('string', { description: '作业类型 id，如 jt/schema-change' }) }, required: ['jobType'] },
       output: jsonOut,
-      execute: (args) => p.rules(args.policies),
+      execute: (args) => p.rulesFor(args.jobType),
     },
     {
-      name: 'ontology_match_increment', risk: 'read',
-      description: '版本区间增量匹配（只读）：物理表名推导 implements + DevOps 最近发布即基线(releaseBaseline) + 双侧(设计增量↔代码增量)结构化比对 → 四态事实(MATCH/AHEAD/BEHIND/DIVERGE)。一致性规则消费该事实做细粒度判定',
-      parameters: {
-        type: 'object',
-        properties: {
-          ...PATH_ARG,
-          physicalTable: S('string', { description: '作业 SQL 目标物理表,如 dwd_tax_payment' }),
-          currentVersion: S('string', { description: '当前模型版本，默认 v4' }),
-          baselineRelease: S('string', { description: '上次发布即基线，默认 REL-0820' }),
-        },
-        required: ['path', 'physicalTable'],
-      },
+      name: 'ontology_consistency_check', risk: 'read',
+      description: '【Function · 一致性检查 · 编排入口】作业与模型版本区间对账（Job →implements→ Model；Release →releaseBaseline→ Job）：返回四态 MATCH/AHEAD/BEHIND/DIVERGE 与字段级冲突。扫描执行在引擎层，本函数只编排本体规则 + 引用层事实',
+      parameters: { type: 'object', properties: { path: S('string', { description: '作业路径' }) }, required: ['path'] },
       output: jsonOut,
-      execute: (args) => p.matchIncrement(args, args),
+      execute: (args) => {
+        const cls = p.classifyJob({ path: args.path, engine: null, ast: detectAst(readText(args.path) ?? '') })
+        if (!cls.ok) return cls
+        return p.consistencyCheck(cls.jobId, {})
+      },
     },
     {
-      name: 'ontology_explain', risk: 'read',
-      description: '发现归因（只读）：输入 finding，输出完整归因链（规则 ← 策略 ← 作业类型 ← 分类依据）与匹配事实（一致性类）；scan.explain 内部调它组装可解释报告',
-      parameters: {
-        type: 'object',
-        properties: { finding: S('string', { description: 'finding id，如 F-101' }) },
-        required: ['finding'],
-      },
+      name: 'ontology_explain_finding', risk: 'read',
+      description: '【Function · 归因】发现沿本体关系反向回溯（Finding →violates→ Rule →containsRule→ Policy →covers→ PlatformInstance），返回完整归因链',
+      parameters: { type: 'object', properties: { finding: S('string', { description: 'finding id，如 F-101' }) }, required: ['finding'] },
       output: jsonOut,
-      execute: (args) => p.explain(args.finding),
+      execute: (args) => p.explainFinding(args.finding),
     },
     {
       name: 'ontology_propose', risk: 'knowledge-write',
-      description: '本体提案/断言回写（写入·gated）：提交规则/类型/参数修订提案，或回写归类确认(instanceOf 断言)/DIVERGE 裁决结论，返回提案号与治理流程状态。本体 schema 变更不在工具域内（fail-closed 只能在本体平台治理界面）',
+      description: '【Action · 提案/断言/裁决】写本体（gated）：提交规则/类型提案、回写归类断言（instanceOf）、DIVERGE 裁决。返回提案号与治理状态。本体 schema 变更 fail-closed（只能在治理界面）',
       parameters: {
         type: 'object',
         properties: {
-          kind: S('string', { description: 'proposal | assertion' }),
-          payload: S('object', { description: '提案/断言内容，如 { type:"rule", ... } 或 { instanceOf: "schema-change" }' }),
-          approvalNote: S('string', { description: '审批卡话术：写清"在确认什么"' }),
+          kind: S('string', { description: 'proposal | assertion | diverge-ruling' }),
+          payload: S('object', { description: '提案/断言/裁决内容' }),
+          approvalNote: S('string', { description: '审批卡话术' }),
         },
         required: ['kind', 'payload', 'approvalNote'],
       },

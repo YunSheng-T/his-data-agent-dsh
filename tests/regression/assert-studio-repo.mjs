@@ -28,7 +28,7 @@ await post('/api/repo/checkout', { branch: 'main' })
 // 树：分支清单 + 当前分支 + 条目带 kind
 const tree = await fetch(BASE + '/api/repo/tree').then(j)
 ok('repo/tree 返回分支清单与当前分支', Array.isArray(tree.branches) && tree.branches.includes('main') && !!tree.current, `current=${tree.current}`)
-ok('repo/tree 条目带 kind', tree.tree.every((e) => e.path && ['etl', 'dag', 'ops', 'other'].includes(e.kind)), `${tree.tree.length} 个文件`)
+ok('repo/tree 条目带 kind', tree.tree.every((e) => e.path && ['etl', 'dag', 'ops', 'script', 'svc', 'other'].includes(e.kind)), `${tree.tree.length} 个文件`)
 ok('种子仓含 etl 与 dag 两组', tree.tree.some((e) => e.path.startsWith('etl/')) && tree.tree.some((e) => e.path.startsWith('dag/')))
 
 // 文件：.etl 解析出列映射（可视化页签数据契约）——锚定种子文件（含 NVL/CAST 与标准引用）

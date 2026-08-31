@@ -93,15 +93,14 @@ export function scanScriptJob(repo, modeling, onto, path) {
   const ast = /ADD\s+COLUMNS/i.test(text) ? { alterAddColumns: true } : /\b(UPDATE|INSERT\s+INTO)\b/i.test(text) ? { dml: true } : {}
   const engine = (text.match(/--\s*@engine:\s*(\S+)/) || [])[1] ?? 'Hive SQL'
   const physicalTable = (text.match(/ALTER\s+TABLE\s+(\S+)/i)?.[1] || (text.match(/FROM\s+(\S+)/i) || [])[1]) ?? null
-  const cls = onto ? onto.classify({ path, engine, ast }) : { ok: false, note: '本体服务未挂载' }
-  const pol = cls.ok && onto ? onto.policies(cls.jobType, { tenant: 'finance' }) : null
-  const rl = pol && onto ? onto.rules((pol.hit || []).map((p) => p.id)) : null
-  const match = physicalTable && cls.ok && onto ? onto.matchIncrement(null, { physicalTable }) : null
+  const cls = onto ? onto.classifyJob({ path, engine, ast }) : { ok: false, note: '本体服务未挂载' }
+  const rules = cls.ok && onto ? onto.rulesFor(cls.jobType) : null
+  const match = cls.ok && onto ? onto.consistencyCheck(cls.jobId, {}) : null
   const design = cls.ok ? { pass: true, errors: 0, warns: 0, issues: [] } : { pass: false, errors: 1, warns: 0, issues: [{ rule: 'ontology.classify', level: 'error', message: (cls.note || '本体分类失败') }] }
   const sql = { pass: !ast.dml || ast.alterAddColumns, partition: null, dangers: ast.dml && !ast.alterAddColumns ? ['DML 订正'] : [] }
   const conflict = match ? match.conflicts.filter((c) => c.kind === 'MATCH-CONFLICT') : []
-  const consistency = match ? { pass: conflict.length === 0, model: match.implements ? match.implements.modelName : null, diffs: conflict.map((c) => ({ field: c.field, issue: c.field + ' ' + c.note })) } : { pass: null, reason: '无匹配模型/基线' }
-  return { design, sql, consistency, ontology: rl ? { jobType: cls.jobTypeName, ruleCount: rl.count, implVersion: rl.implVersion, matchStatus: match ? match.status : null, conflictCount: conflict.length } : null }
+  const consistency = match ? { pass: conflict.length === 0, model: match.implements ? match.implements.physicalTable : null, diffs: conflict.map((c) => ({ field: c.field, issue: c.field + ' 类型冲突' })) } : { pass: null, reason: '无匹配模型/基线' }
+  return { design, sql, consistency, ontology: rules ? { jobType: cls.jobTypeName, instance: cls.instanceName, ruleCount: rules.ruleCount, impls: rules.rules.map((r) => r.impl ? r.impl.ruleset : null).filter(Boolean), matchStatus: match ? match.status : null, conflictCount: conflict.length } : null }
 }
 
 export function buildDevTools({ repo, dryrun, modeling, sched, cicd, onto }) {

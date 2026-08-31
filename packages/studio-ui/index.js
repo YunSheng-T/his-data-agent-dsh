@@ -230,12 +230,12 @@ async function route(ctx, req, res, url) {
     const engine = (text.match(/--\s*@engine:\s*(\S+)/) || [])[1] ?? 'Hive SQL'
     const ast = /ADD\s+COLUMNS/i.test(text) ? { alterAddColumns: true } : /\b(UPDATE|INSERT\s+INTO)\b/i.test(text) ? { dml: true } : {}
     const physicalTable = (text.match(/ALTER\s+TABLE\s+(\S+)/i)?.[1] || (text.match(/FROM\s+(\S+)/i) || [])[1]) ?? null
-    const cls = onto.classify({ path: p, engine, ast })
-    const pol = cls.ok ? onto.policies(cls.jobType, { tenant: ctx.hisRepo.currentTenant()?.id ?? 'finance' }) : null
-    const rl = pol ? onto.rules((pol.hit || []).map((x) => x.id)) : null
-    const match = physicalTable && cls.ok ? onto.matchIncrement(null, { physicalTable }) : null
-    const findings = onto.listFindings().map((f) => ({ ...f, explain: onto.explain(f.id) }))
-    return json(res, 200, { path: p, classify: cls, policies: pol?.hit ?? [], filtered: pol?.filtered ?? [], rules: rl ?? null, match, findings, trace: onto.trace(), ontVersion: onto.ontVersion })
+    const cls = onto.classifyJob({ path: p, engine, ast })
+    const pol = cls.ok ? onto.policiesFor(cls.jobType) : null
+    const rl = cls.ok ? onto.rulesFor(cls.jobType) : null
+    const match = cls.ok ? onto.consistencyCheck(cls.jobId, {}) : null
+    const findings = onto.listFindings().map((f) => ({ ...f, explain: onto.explainFinding(f.id) }))
+    return json(res, 200, { path: p, classify: cls, policies: pol?.policies ?? [], rules: rl ?? null, match, findings, trace: onto.trace(), ontVersion: onto.ontVersion })
   }
   if (url.pathname === '/api/repo/lineage') {
     const p = url.searchParams.get('path')
