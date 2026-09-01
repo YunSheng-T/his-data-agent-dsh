@@ -7,6 +7,9 @@
 
 # 内网模型路由（OpenAI 兼容网关）：把 baseURL 换成内网网关地址，设 INTERNAL_LLM_API_KEY 即可，
 # 让 Studio 用内部模型，无需 DEEPSEEK_API_KEY。若想用外网 DeepSeek，删掉下面两段即可。
+# ⚠ 只改 baseURL 那一行的值！models/api/apiKeyEnv/displayName 必须整段保留：
+#   cordis patch 是按 id 整块替换 config（不合并），删掉 models 会让这个用户自定义
+#   provider「internal-openai」解析不出模型 → 启动即报 plugin tree failed / resolves no models。
 - id: llm-pi-ai
   config:
     providers:

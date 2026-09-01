@@ -3,6 +3,9 @@
 # 正式接入只需两步：把 baseURL 换成内网网关地址 + 设置 INTERNAL_LLM_API_KEY 环境变量。
 
 # M2: OpenAI 兼容的内网模型网关路由（pi-ai 桥，dsh-base 已内置该插件）
+# ⚠ 只改 baseURL 那一行的值！models/api/apiKeyEnv/displayName 必须整段保留：
+#   cordis patch 是按 id 整块替换 config（不合并），删掉 models 会让这个用户自定义
+#   provider「internal-openai」解析不出模型 → 启动即报 plugin tree failed / resolves no models。
 - id: llm-pi-ai
   config:
     providers:
