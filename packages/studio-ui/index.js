@@ -237,6 +237,18 @@ async function route(ctx, req, res, url) {
     const written = ctx.hisRepo.writeWorking(path, text)
     return json(res, 200, { created: true, ...written, targetTable: (text.match(/ALTER\s+TABLE\s+(\S+)/i) || [])[1] ?? null, note: '新建 .sql 到工作区未提交态；提交走 repo_commit（提交前预扫描）' })
   }
+  // 保存代码页编辑（工作区未提交态，与 sql-create 同层）：前端「保存修改」按钮调用。
+  // 写回后仍是未提交，前端刷新仓树即可见 dirty/提交按钮；提交走 repo_commit（提交前预扫描）。
+  if (url.pathname === '/api/repo/write' && req.method === 'POST') {
+    const body = JSON.parse(await readBody(req))
+    const path = body.path
+    if (!path) return json(res, 400, { error: 'path required' })
+    const content = typeof body.content === 'string' ? body.content : ''
+    try {
+      const written = ctx.hisRepo.writeWorking(path, content)
+      return json(res, 200, { ok: true, ...written, note: '已保存工作区未提交态；提交走 repo_commit（提交前预扫描）' })
+    } catch (e) { return json(res, 400, { error: e.message }) }
+  }
   // 本体驱动扫描（V15 @his/domain-tools-ontology）：对脚本作业做本体分类/策略/规则/增量匹配/归因，返回扫描数据供前端渲染
   if (url.pathname === '/api/repo/onto-scan') {
     const p = url.searchParams.get('path')

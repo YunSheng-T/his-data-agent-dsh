@@ -115,6 +115,7 @@ input,textarea,select{font-family:inherit}
 
 .er-box{border:1px solid var(--hair);border-radius:10px;background:rgba(255,255,255,.45);padding:18px;overflow-x:auto}
 .ddl-view{background:var(--term-bg);color:#d7dcd2;border-radius:10px;font-family:var(--mono);font-size:11.5px;line-height:1.75;padding:16px 18px;white-space:pre;overflow-x:auto}
+.code-editor{width:100%;min-height:360px;background:var(--term-bg);color:#d7dcd2;border-radius:10px;border:1px solid var(--hair);font-family:var(--mono);font-size:11.5px;line-height:1.75;padding:16px 18px;white-space:pre;overflow:auto;tab-size:2;resize:vertical}
 .ddl-view .cm{color:var(--term-green)}
 .ddl-view .an{color:#e8b04b}
 /* V13 · .ops 执行序列（拓扑分层 + 并行组） */
@@ -836,6 +837,7 @@ async function viewPublish(m) {
 let repoCache = {};
 let scanCache = {};      // path -> onto-scan 结果（切「扫描」tab 提速：不重复重算）
 let lineageCache = {};   // path -> lineage 结果（切「血缘」tab 提速）
+let editingCode = {};    // path -> true（代码页处于直接编辑态；保存/放弃后清除）
 async function repoFile(p) {
   if (!repoCache[p]) {
     const d = await api('/api/repo/file?path=' + encodeURIComponent(p));
@@ -886,20 +888,36 @@ async function renderRepoWs() {
 }
 function viewCode(f) {
   const ent = repoState.tree.find((e) => e.path === active.file);
-  const html = esc(f.text)
-    .replace(/(--\s*@[^\n]*)/g, '<span class="an">$1</span>')
-    .replace(/(--[^\n]*)/g, (c) => c.startsWith('<span') ? c : `<span class="cm">${c}</span>`);
   const uncommitted = ent && (ent.dirty || ent.uncommitted);
   const isSql = String(f.file).endsWith('.sql');
-  // 新建 SQL 是仓库级操作：打开任意 SQL 都显示（新建后自然进入未提交态，可见提交按钮）
   const newSqlBtn = isSql ? '<button class="btn" id="btn-new-sql-code" title="新建一个 SQL 脚本（dbscript/*.sql）">+ 新建 SQL</button>' : '';
-  $('#ws-body').innerHTML = `<div class="sec-title">代码 <span class="tlabel">${esc(f.parsed.engine ?? 'etl')} · ${uncommitted ? '未提交' : '与分支一致'}</span>${newSqlBtn}${uncommitted ? '<button class="btn primary" id="btn-commit">提交变更</button>' : ''}</div>
-    <div class="ddl-view">${html}</div>
-    <p class="note">${uncommitted ? '工作区修改未提交——提交后才会落到分支上。' : '代码与分支一致。'}改代码可以交给右侧 Agent。</p>`;
+  const editing = !!editingCode[active.file];
+  const body = editing
+    ? `<textarea id="code-editor" class="code-editor" spellcheck="false">${esc(f.text)}</textarea>`
+    : `<div class="ddl-view">${esc(f.text).replace(/(--\s*@[^\n]*)/g, '<span class="an">$1</span>').replace(/(--[^\n]*)/g, (c) => c.startsWith('<span') ? c : `<span class="cm">${c}</span>`)}</div>`;
+  const editBtn = editing
+    ? '<button class="btn" id="btn-code-save">保存修改</button><button class="btn" id="btn-code-cancel">放弃</button>'
+    : '<button class="btn" id="btn-code-edit">编辑</button>';
+  $('#ws-body').innerHTML = `<div class="sec-title">代码 <span class="tlabel">${esc(f.parsed.engine ?? 'etl')} · ${uncommitted ? '未提交' : '与分支一致'}</span>${newSqlBtn}${editBtn}${uncommitted ? '<button class="btn primary" id="btn-commit">提交变更</button>' : ''}</div>
+    ${body}
+    <p class="note">${editing ? '编辑中：修改后点「保存修改」写入工作区未提交态；「放弃」还原。' : (uncommitted ? '工作区修改未提交——提交后才会落到分支上。' : '只读视图。点「编辑」直接改代码；改代码也可交给右侧 Agent。')}</p>`;
   const bc = document.getElementById('btn-commit');
   if (bc) bc.addEventListener('click', () => send('提交前先做本体推理扫描：对 ' + active.file + ' 走 get_anchored_object → policy_get_policies → policy_get_rules → rule_get_implementations → get_scan_plan → check_consistency，把扫描结论/一致性差异讲清楚。若存在差异，等我在会话里选择【修复】或【忽略并提交】；若扫描干净，直接 repo_commit 提交。', true));
   const nb = document.getElementById('btn-new-sql-code');
   if (nb) nb.addEventListener('click', newSql);
+  const eb = document.getElementById('btn-code-edit');
+  if (eb) eb.addEventListener('click', () => { editingCode[active.file] = true; renderWorkspace(); });
+  const cb = document.getElementById('btn-code-cancel');
+  if (cb) cb.addEventListener('click', () => { delete editingCode[active.file]; renderWorkspace(); });
+  const sb = document.getElementById('btn-code-save');
+  if (sb) sb.addEventListener('click', async () => {
+    const val = document.getElementById('code-editor').value;
+    const r = await api('/api/repo/write', { method: 'POST', body: JSON.stringify({ path: active.file, content: val }) });
+    if (r.error) { toast('保存失败: ' + r.error); return; }
+    delete editingCode[active.file];
+    toast('已保存 ' + active.file + '（未提交）');
+    invalidateCaches(); await loadRepoTree(); renderWorkspace();
+  });
 }
 /* 可视化 · 字段映射（V9 曲线 + 转换徽标框） */
 function viewFlow(f) {
