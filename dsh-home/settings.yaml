@@ -1,0 +1,33 @@
+# dsh 用户 settings（入库默认值；本机可改，改后 git 可见，按需提交）
+
+# 结构：settings.yaml = 多个 namespace 段的集合，每段一个顶层键。
+#   - agent-default-model：默认模型选择（存「选中态」单个 provider+model，切换时自动写）
+#   - llm-pi-ai：模型 provider 配置（管「有哪些可选」；providers 是 dict，可增删）
+
+# 常用操作：
+#   1) 给已有 provider 加多个可选模型：在 llm-pi-ai.providers.<id>.models 下列全（整块替换，
+#      displayName/api 等未写字段从内置 composition 继承）。模型条目字段：
+#      id(必填) / name / contextWindow / maxTokens / input([text] 或 [text,image])。
+#   2) 加自己的网关：llm-pi-ai.providers 下加新 id（baseURL/apiKeyEnv/models），
+#      并 export 对应 key。
+#   3) 本文件可被会话区 provider/model 下拉修改（写回 agent-default-model）。
+
+agent-default-model:
+  provider: internal-openai
+  model: internal-chat
+
+# 示例：给 internal-openai 加多个可选模型（取消注释并按需改）
+# llm-pi-ai:
+#   providers:
+#     internal-openai:
+#       baseURL: http://127.0.0.1:8300/v1
+#       apiKeyEnv: INTERNAL_LLM_API_KEY
+#       models:
+#         - id: internal-chat
+#           contextWindow: 131072
+#         - id: internal-chat-128k
+#           contextWindow: 131072
+#           maxTokens: 32768
+#         - id: internal-vision
+#           contextWindow: 65536
+#           input: [text, image]
