@@ -531,7 +531,7 @@ async function switchTenant(t) {
   openFiles = openFiles.filter((f) => f.kind !== 'repo');
   if (active.kind === 'repo') active = { kind: null, file: null };
   await loadRepoTree(); renderFileTabs(); renderWorkspace(); renderChips();
-  if (sessionId && r.current.dataTenant) send(`workspace_anchor ${r.branch} .`, true);
+  if (sessionId && r.current.dataTenant) setAnchor({ branch: r.branch, dir: '.' });
 }
 const inDataTenant = () => tenantState.current.dataTenant !== false;
 
@@ -595,7 +595,7 @@ $('#branch-sel').addEventListener('change', async (e) => {
   openFiles = openFiles.filter((f) => f.kind !== 'repo');
   if (active.kind === 'repo') active = { kind: null, file: null };
   await loadRepoTree(); renderFileTabs(); renderWorkspace();
-  if (sessionId) send(`workspace_anchor ${e.target.value} .`, true);
+  if (sessionId) setAnchor({ branch: e.target.value, dir: '.' });
 });
 
 /* ================= 文件页签（多开） ================= */
@@ -611,7 +611,7 @@ function openFile(kind, file) {
   renderFileTabs(); renderWorkspace(); loadModels(); loadRepoTree();
   anchorObj = kind === 'model' ? file : `${repoState.current} · ${file}`;
   $('#anchor-obj').textContent = anchorObj;
-  if (sessionId) send(kind === 'model' ? `workspace_anchor ${file}` : `workspace_anchor ${repoState.current} ${file.split('/').slice(0, -1).join('/')}`, true);
+  if (sessionId) setAnchor(kind === 'model' ? { file } : { branch: repoState.current, dir: file.split('/').slice(0, -1).join('/') });
 }
 function renderFileTabs() {
   $('#file-tabs').innerHTML = openFiles.map((f) => {
@@ -1671,6 +1671,15 @@ async function newSql() {
 }
 const newSqlBtnHeader = document.getElementById('btn-new-sql');
 if (newSqlBtnHeader) newSqlBtnHeader.addEventListener('click', newSql);
+
+/* 切换工作区锚点：直接调 /api/anchor 设置锚点（不再经 agent 发 workspace_anchor 消息），
+   避免「锚点一切换就触发一次 agent 会话/LLM 调用」。agent 下次真正提问时 pre-step 注入带入最新锚点摘要。 */
+async function setAnchor(args) {
+  try {
+    const r = await api('/api/anchor', { method: 'POST', body: JSON.stringify(args) });
+    if (r.error) { toast('锚点切换失败: ' + r.error); }
+  } catch (e) { toast('锚点切换失败: ' + (e.message || e)); }
+}
 </script>
 </body>
 </html>

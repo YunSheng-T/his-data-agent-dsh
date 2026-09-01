@@ -66,9 +66,34 @@ function staleJobs(ctx, repo, branch) {
 export function apply(ctx) {
   // 锚定状态作为服务透出（供本体层读「当前锚定的对象是什么」）：current 是模块态，
   // 本体 provider 经 ctx.hisAnchor.getCurrent() 取最新锚定，而非由 Agent 手传 path。
+  // 锚定核心逻辑（工具与 studio-ui /api/anchor 共用）：设置锚点并返回摘要。
+  // branch 时 checkout 分支；file 时锚定模型。
+  const anchor = async (args) => {
+    if (!args) throw new Error('workspace_anchor 需要 file（模型）或 branch（代码仓）参数')
+    if (args.branch) {
+      const repo = ctx.hisRepo
+      const exists = repo.branches().includes(args.branch)
+      const actual = repo.checkout(args.branch, { create: !exists })
+      const dir = args.dir ?? null
+      if (dir && !/^(etl|dag|ops|dbscript|svc)(\/[a-z0-9_-]+)*$/i.test(dir)) throw new Error(`非法作业目录: ${dir}（只接受 etl/*、dag、ops、dbscript、svc）`)
+      current = { kind: 'repo', branch: actual, dir, key: `repo:${actual}:${dir ?? ''}@${repo.isClean() ? 'clean' : 'dirty'}`, at: new Date().toISOString() }
+      console.error(`[anchor] 锚定 -> ${current.key}${exists ? '' : '（新建分支）'}`)
+      const stale = staleJobs(ctx, repo, actual)
+      return { space: '开发空间', repo: repo.dir.split('/').pop(), branch: actual, created: !exists, dir, tree: repo.treeWithState(actual), staleJobs: stale }
+    }
+    if (args.file) {
+      const s = ctx.hisModeling.anchorSummary(args.file)
+      current = { kind: 'model', file: args.file, key: `model:${args.file}@${s.version ?? '?'}`, at: new Date().toISOString() }
+      console.error(`[anchor] 锚定 -> ${current.key}`)
+      return s
+    }
+    throw new Error('workspace_anchor 需要 file（模型）或 branch（代码仓）参数')
+  }
+
   ctx.provide('hisAnchor', {
     getCurrent: () => (current ? { ...current } : null),
     key: () => (current ? current.key : null),
+    anchor, // UI 直接切锚点（不触发 agent 会话）；与工具逻辑一致
   })
 
   // 锚定工具：UI/人通过它切换锚点（等价于 UI 里点击文件/分支/目录）
@@ -89,26 +114,7 @@ export function apply(ctx) {
       schema: { type: 'object' },
       render: (_a, v) => [{ type: 'text', text: JSON.stringify(v, null, 2) }],
     },
-    execute: async (args) => {
-      if (args.branch) {
-        const repo = ctx.hisRepo
-        const exists = repo.branches().includes(args.branch)
-        const actual = repo.checkout(args.branch, { create: !exists })
-        const dir = args.dir ?? null
-        if (dir && !/^(etl|dag|ops|dbscript|svc)(\/[a-z0-9_-]+)*$/i.test(dir)) throw new Error(`非法作业目录: ${dir}（只接受 etl/*、dag、ops、dbscript、svc）`)
-        current = { kind: 'repo', branch: actual, dir, key: `repo:${actual}:${dir ?? ''}@${repo.isClean() ? 'clean' : 'dirty'}`, at: new Date().toISOString() }
-        console.error(`[anchor] 锚定 -> ${current.key}${exists ? '' : '（新建分支）'}`)
-        const stale = staleJobs(ctx, repo, actual)
-        return { space: '开发空间', repo: repo.dir.split('/').pop(), branch: actual, created: !exists, dir, tree: repo.treeWithState(actual), staleJobs: stale }
-      }
-      if (args.file) {
-        const s = ctx.hisModeling.anchorSummary(args.file)
-        current = { kind: 'model', file: args.file, key: `model:${args.file}@${s.version ?? '?'}`, at: new Date().toISOString() }
-        console.error(`[anchor] 锚定 -> ${current.key}`)
-        return s
-      }
-      throw new Error('workspace_anchor 需要 file（模型）或 branch（代码仓）参数')
-    },
+    execute: (args) => anchor(args),
   })
 
   // 上下文注入：锚定变化时把摘要注入下一个 step

@@ -196,6 +196,15 @@ async function route(ctx, req, res, url) {
       address: ctx.hisRepo.address(),
     })
   }
+  // 切换工作区锚点：UI 直接设置锚点（不再经 agent 发 workspace_anchor 消息）——
+  // 避免「锚点一切换就触发一次 agent 会话」。body: {file} 或 {branch, dir?}；逻辑与 workspace_anchor 工具一致。
+  if (url.pathname === '/api/anchor' && req.method === 'POST') {
+    const body = JSON.parse(await readBody(req))
+    try {
+      const r = await ctx.hisAnchor.anchor(body)
+      return json(res, 200, { ok: true, anchored: r })
+    } catch (e) { return json(res, 400, { error: e.message }) }
+  }
   if (url.pathname === '/api/repo/checkout' && req.method === 'POST') {
     const body = JSON.parse(await readBody(req))
     try {
