@@ -166,7 +166,30 @@ llm-pi-ai:
           contextWindow: 131072
 ```
 
-  然后 `export MY_GATEWAY_API_KEY=xxx` 并重启 Studio，会话区 provider 下拉即出现 `my-gateway`，可切换。默认模型选择（`agent-default-model`）持久化在同一个 settings.yaml，launcher 不会在启动时覆盖你已选好的 provider/model。
+  然后 `export MY_GATEWAY_API_KEY=xxx` 并重启 Studio，会话区 provider 下拉即出现 `my-gateway`，可切换。
+
+- **给已有 provider 加多个可选模型**：在 `llm-pi-ai.providers.<id>` 下重写 `models` 列表（**整块替换**，不是追加——列几个就是几个可选；displayName/api 等未写的字段会从内置 composition 继承，无需重复）：
+
+```yaml
+llm-pi-ai:
+  providers:
+    internal-openai:
+      baseURL: http://127.0.0.1:8300/v1
+      apiKeyEnv: INTERNAL_LLM_API_KEY
+      models:                    # 这三个都会出现在会话区 model 下拉，任选
+        - id: internal-chat
+          contextWindow: 131072
+        - id: internal-chat-128k
+          contextWindow: 131072
+          maxTokens: 32768
+        - id: internal-vision
+          contextWindow: 65536
+          input: ["text", "image"]
+```
+
+  模型条目字段：`id`（必填）、`name`（显示名）、`contextWindow`、`maxTokens`、`input`（`["text"]` 或 `["text","image"]` 支持图片）。
+
+- **`agent-default-model` 存「选中态」不是列表**：它只保存当前默认的单个 `{provider, model}`（切换时自动写），可选哪些模型由上面 provider 的 `models` 列表决定。二者分工：`llm-pi-ai` 段管「有哪些可选」，`agent-default-model` 管「默认选中哪个」。默认选择持久化在同一个 settings.yaml，launcher 只在 settings 尚无该段时写一次、不覆盖你已选好的。
 
 ## 关键约定
 

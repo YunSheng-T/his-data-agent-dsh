@@ -24,6 +24,24 @@
 #           - id: my-model
 #             contextWindow: 131072
 #   然后设 MY_GATEWAY_API_KEY，会话区 provider 下拉即可看到 my-gateway 并切换。
+#
+# 「给已有 provider 加多个可选模型」：在 settings.yaml 的 llm-pi-ai.providers.<id> 下重写 models
+# 列表（整块替换：列几个就是几个可选；displayName/api 等未写字段从内置 composition 继承）：
+#   llm-pi-ai:
+#     providers:
+#       internal-openai:
+#         baseURL: http://127.0.0.1:8300/v1
+#         apiKeyEnv: INTERNAL_LLM_API_KEY
+#         models:
+#           - id: internal-chat
+#             contextWindow: 131072
+#           - id: internal-chat-128k
+#             contextWindow: 131072
+#             maxTokens: 32768
+# 模型条目字段：id(必填)/name/contextWindow/maxTokens/input(["text"] 或 ["text","image"])。
+#
+# 「agent-default-model 存选中态，不是列表」：它只保存当前默认的 {provider, model}（切换自动写），
+# 可选哪些模型由 provider 的 models 列表决定；launcher 仅在 settings 尚无该段时写一次默认、不覆盖用户选择。
 - id: llm-pi-ai
   config:
     providers:
