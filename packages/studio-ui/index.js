@@ -205,6 +205,23 @@ async function route(ctx, req, res, url) {
       return json(res, 200, { ok: true, anchored: r })
     } catch (e) { return json(res, 400, { error: e.message }) }
   }
+  // 读当前默认模型（会话区下拉初始值）
+  if (url.pathname === '/api/model' && req.method === 'GET') {
+    const sel = ctx.agentDefaultModel.currentSelection()
+    return json(res, 200, { provider: sel.provider, model: sel.model })
+  }
+  // 切换默认模型：写 settings（agent-default-model 层），后续新会话用新模型。
+  // 双路由（internal-openai / deepseek-official）都在 dsh-base 注册；默认仍是 internal-openai。
+  if (url.pathname === '/api/model/switch' && req.method === 'POST') {
+    const body = JSON.parse(await readBody(req))
+    const provider = body.provider
+    const model = body.model
+    if (!provider || !model) return json(res, 400, { error: 'provider/model required' })
+    try {
+      await ctx.agentDefaultModel.saveSelection({ provider, model })
+      return json(res, 200, { ok: true, provider, model })
+    } catch (e) { return json(res, 400, { error: e.message }) }
+  }
   if (url.pathname === '/api/repo/checkout' && req.method === 'POST') {
     const body = JSON.parse(await readBody(req))
     try {

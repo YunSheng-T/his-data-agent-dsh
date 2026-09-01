@@ -429,7 +429,7 @@ input,textarea,select{font-family:inherit}
         <textarea id="prompt" rows="1" placeholder="就锚定对象提问或下指令…"></textarea>
         <button class="a-send" id="send">↑</button>
       </div>
-      <div class="a-meta"><span><span class="led"></span>DeepSeek</span><span id="session-id"></span><span>写操作 · 需确认</span></div>
+      <div class="a-meta"><span class="led"></span><select id="model-sel" title="切换默认模型（内部模型 / DeepSeek）"><option value="internal-openai">内部模型</option><option value="deepseek-official">DeepSeek</option></select><span id="session-id"></span><span>写操作 · 需确认</span></div>
     </div>
   </aside>
 </div>
@@ -1680,6 +1680,24 @@ async function setAnchor(args) {
     if (r.error) { toast('锚点切换失败: ' + r.error); }
   } catch (e) { toast('锚点切换失败: ' + (e.message || e)); }
 }
+
+/* 默认模型切换（内部模型 / DeepSeek）：初始读当前，切换写 settings，后续新会话生效。 */
+async function loadModelSel() {
+  try {
+    const r = await api('/api/model');
+    const sel = document.getElementById('model-sel');
+    if (sel && r.provider) sel.value = r.provider;
+  } catch (e) {}
+}
+const modelSel = document.getElementById('model-sel');
+if (modelSel) modelSel.addEventListener('change', async (e) => {
+  const provider = e.target.value;
+  const model = provider === 'deepseek-official' ? 'deepseek-v4-flash' : 'internal-chat';
+  const r = await api('/api/model/switch', { method: 'POST', body: JSON.stringify({ provider, model }) });
+  if (r.error) { toast('模型切换失败: ' + r.error); loadModelSel(); return; }
+  toast('已切换到 ' + (provider === 'deepseek-official' ? 'DeepSeek' : '内部模型'));
+});
+loadModelSel();
 </script>
 </body>
 </html>

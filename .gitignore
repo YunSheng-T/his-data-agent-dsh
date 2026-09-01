@@ -10,6 +10,8 @@ runtime/
 # 会话日志（含对话内容，不入库）
 dsh-home/sessions/
 dsh-home/.anonymous-user-id
+# 模型切换 settings（运行时写入，用户可切内部/DeepSeek；不入库）
+dsh-home/settings.yaml
 
 # M0/M1 穿刺实验临时区
 .spikes/

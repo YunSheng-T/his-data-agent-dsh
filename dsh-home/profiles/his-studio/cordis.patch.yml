@@ -25,11 +25,10 @@
   config:
     provider: internal-openai
     model: internal-chat
-# 显式摘除外网 DeepSeek 路由（dsh-base 默认启用 llm-deepseek）：内部模型下只保留
-# internal-openai 一条路，避免 agent-default-model 一旦失效就回退 deepseek-official
-# 而强要 DEEPSEEK_API_KEY（即「设了内部模型仍报没有 DeepSeek_API_KEY」）
-- id: llm-deepseek
-  disabled: true
+# 双模型路由（内部为默认，DeepSeek 可切换）：dsh-base 默认提供 llm-deepseek(deepseek-official)，
+# 保留它供「模型切换」切到外网 DeepSeek；默认仍是 internal-openai。切换经 settings 层
+# （agent-default-model 的 settings.yaml 覆盖 composition entry：用户层优先）。
+# 启动需设相应 key：内部设 INTERNAL_LLM_API_KEY，DeepSeek 设 DEEPSEEK_API_KEY（可都设）。
 - id: tool-bash
   disabled: true
 - id: tool-pwsh
