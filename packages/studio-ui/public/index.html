@@ -146,6 +146,9 @@ input,textarea,select{font-family:inherit}
 .btn.primary{background:var(--ink);color:var(--paper)}
 .btn.primary:hover{opacity:.82}
 .btn.danger{border-color:var(--err);color:var(--err)}
+.btn.mini{margin-left:8px;padding:2px 9px;font-size:10px;border-color:var(--hair);color:var(--ink);background:#fff}
+.btn.mini:hover{background:var(--paper)}
+.dir-head .btn.mini{margin-left:auto}
 
 .jobref{display:flex;gap:8px;align-items:center;font-size:11px;padding:6px 8px;border:1px solid var(--hair);border-radius:6px;margin-top:6px;background:rgba(255,255,255,.45)}
 .jobref .mono{color:var(--muted)}
@@ -384,7 +387,7 @@ input,textarea,select{font-family:inherit}
       <div class="model-tree" id="model-tree"></div>
     </div>
     <div id="repo-view" style="display:none;flex-direction:column;flex:1;min-height:0">
-      <div class="dir-head"><span class="tlabel">作业目录</span><select id="branch-sel"></select></div>
+      <div class="dir-head"><span class="tlabel">作业目录</span><button class="btn mini" id="btn-new-sql" title="新建 SQL 脚本（dbscript/*.sql，提交前可扫描对比）">+ 新建 SQL</button><select id="branch-sel"></select></div>
       <div class="model-tree" id="repo-tree"></div>
     </div>
     <div id="audit">
@@ -889,24 +892,14 @@ function viewCode(f) {
   const uncommitted = ent && (ent.dirty || ent.uncommitted);
   const isSql = String(f.file).endsWith('.sql');
   // 新建 SQL 是仓库级操作：打开任意 SQL 都显示（新建后自然进入未提交态，可见提交按钮）
-  const newSqlBtn = isSql ? '<button class="btn" id="btn-new-sql" title="新建一个 SQL 脚本（dbscript/*.sql）">+ 新建 SQL</button>' : '';
+  const newSqlBtn = isSql ? '<button class="btn" id="btn-new-sql-code" title="新建一个 SQL 脚本（dbscript/*.sql）">+ 新建 SQL</button>' : '';
   $('#ws-body').innerHTML = `<div class="sec-title">代码 <span class="tlabel">${esc(f.parsed.engine ?? 'etl')} · ${uncommitted ? '未提交' : '与分支一致'}</span>${newSqlBtn}${uncommitted ? '<button class="btn primary" id="btn-commit">提交变更</button>' : ''}</div>
     <div class="ddl-view">${html}</div>
     <p class="note">${uncommitted ? '工作区修改未提交——提交后才会落到分支上。' : '代码与分支一致。'}改代码可以交给右侧 Agent。</p>`;
   const bc = document.getElementById('btn-commit');
   if (bc) bc.addEventListener('click', () => send('提交前先做本体推理扫描：对 ' + active.file + ' 走 get_anchored_object → policy_get_policies → policy_get_rules → rule_get_implementations → get_scan_plan → check_consistency，把扫描结论/一致性差异讲清楚。若存在差异，等我在会话里选择【修复】或【忽略并提交】；若扫描干净，直接 repo_commit 提交。', true));
-  const nb = document.getElementById('btn-new-sql');
-  if (nb) nb.addEventListener('click', async () => {
-    const name = prompt('新建 SQL 文件名（dbscript/ 下，.sql 结尾）', 'dbscript/' + String(active.file.split('/').pop() || 'alter_dwd_').replace(/\.[^.]+$/, '') + '_v4.sql');
-    if (!name) return;
-    if (!name.startsWith('dbscript/')) { toast('必须以 dbscript/ 开头'); return; }
-    const r = await api('/api/repo/sql-create', { method: 'POST', body: JSON.stringify({ path: name }) });
-    if (r.error) { toast('新建失败: ' + r.error); return; }
-    if (!r.created) { toast(r.reason || '文件已存在'); return; }
-    toast('已新建 ' + name + '（未提交）');
-    invalidateCaches(); await loadRepoTree();
-    openFile('repo', name);
-  });
+  const nb = document.getElementById('btn-new-sql-code');
+  if (nb) nb.addEventListener('click', newSql);
 }
 /* 可视化 · 字段映射（V9 曲线 + 转换徽标框） */
 function viewFlow(f) {
@@ -1644,6 +1637,22 @@ setInterval(() => { poll(); }, 1500);
 
 loadModels(); loadRepoTree(); loadTenants(); loadSessionList(); renderChips(); renderWorkspace();
 setInterval(loadSessionList, 5000);
+
+/* 新建 SQL：仓库级操作，仓树头与代码页共用；新建后自动打开未提交文件、刷新仓树、出现提交按钮 */
+async function newSql() {
+  const def = 'dbscript/alter_dwd_' + (new Date().toISOString().slice(0, 10).replace(/-/g, '')) + '.sql';
+  const name = prompt('新建 SQL 文件名（dbscript/ 下，.sql 结尾）', def);
+  if (!name) return;
+  if (!name.startsWith('dbscript/')) { toast('必须以 dbscript/ 开头'); return; }
+  const r = await api('/api/repo/sql-create', { method: 'POST', body: JSON.stringify({ path: name }) });
+  if (r.error) { toast('新建失败: ' + r.error); return; }
+  if (!r.created) { toast(r.reason || '文件已存在'); return; }
+  toast('已新建 ' + name + '（未提交）');
+  invalidateCaches(); await loadRepoTree();
+  openFile('repo', name);
+}
+const newSqlBtnHeader = document.getElementById('btn-new-sql');
+if (newSqlBtnHeader) newSqlBtnHeader.addEventListener('click', newSql);
 </script>
 </body>
 </html>
