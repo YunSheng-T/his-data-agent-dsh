@@ -1,0 +1,9 @@
+# studio-ui 独立安装依赖（monorepo 中它不是根 workspace 成员）
+# nodeLinker: hoisted + autoInstallPeers: true：dsh-llm/dsh-agent/dsh-session 及其
+# peer 依赖（cordis 等）都会提升到 packages/studio-ui/node_modules 顶层，
+# ESM 从 link 目标解析时稳定可找到，跨平台（macOS/Windows一致）。
+packages:
+  - .
+
+nodeLinker: hoisted
+autoInstallPeers: true
