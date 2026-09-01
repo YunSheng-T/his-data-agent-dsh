@@ -21,3 +21,6 @@ dsh-home/.anonymous-user-id
 
 # 系统
 .DS_Store
+
+# IDE
+.idea/

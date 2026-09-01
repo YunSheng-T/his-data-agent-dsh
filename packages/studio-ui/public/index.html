@@ -523,7 +523,7 @@ async function switchTenant(t) {
   await loadTenants();
   toast(`已切到租户 ${t}（${r.current.cn}）`);
   // 全链路跟随：仓树/页签/工作区/面包屑/快捷指令
-  repoCache = {};
+  invalidateCaches();
   openFiles = openFiles.filter((f) => f.kind !== 'repo');
   if (active.kind === 'repo') active = { kind: null, file: null };
   await loadRepoTree(); renderFileTabs(); renderWorkspace(); renderChips();
@@ -587,7 +587,7 @@ $('#branch-sel').addEventListener('change', async (e) => {
   if (r.error) { toast('分支切换失败: ' + r.error); await loadRepoTree(); return; }
   repoState = { ...repoState, ...r };
   toast('已切到分支 ' + e.target.value);
-  repoCache = {};
+  invalidateCaches();
   openFiles = openFiles.filter((f) => f.kind !== 'repo');
   if (active.kind === 'repo') active = { kind: null, file: null };
   await loadRepoTree(); renderFileTabs(); renderWorkspace();
@@ -831,6 +831,8 @@ async function viewPublish(m) {
 
 /* ----- 代码仓工作间 ----- */
 let repoCache = {};
+let scanCache = {};      // path -> onto-scan 结果（切「扫描」tab 提速：不重复重算）
+let lineageCache = {};   // path -> lineage 结果（切「血缘」tab 提速）
 async function repoFile(p) {
   if (!repoCache[p]) {
     const d = await api('/api/repo/file?path=' + encodeURIComponent(p));
@@ -839,6 +841,8 @@ async function repoFile(p) {
   }
   return repoCache[p];
 }
+// 切 tab 提速：scan/lineage 首次请求后缓存；提交/分支切换/文件刷新时整体失效
+function invalidateCaches() { repoCache = {}; scanCache = {}; lineageCache = {}; }
 async function renderRepoWs() {
   const tn = repoState.tenant ?? tenantState.current;
   // 空租户占位视图（V11）：权限按租户隔离说明 + 切回引导
@@ -883,11 +887,26 @@ function viewCode(f) {
     .replace(/(--\s*@[^\n]*)/g, '<span class="an">$1</span>')
     .replace(/(--[^\n]*)/g, (c) => c.startsWith('<span') ? c : `<span class="cm">${c}</span>`);
   const uncommitted = ent && (ent.dirty || ent.uncommitted);
-  $('#ws-body').innerHTML = `<div class="sec-title">代码 <span class="tlabel">${esc(f.parsed.engine ?? 'etl')} · ${uncommitted ? '未提交' : '与分支一致'}</span>${uncommitted ? '<button class="btn primary" id="btn-commit">提交变更</button>' : ''}</div>
+  const isSql = String(f.file).endsWith('.sql');
+  // 新建 SQL 是仓库级操作：打开任意 SQL 都显示（新建后自然进入未提交态，可见提交按钮）
+  const newSqlBtn = isSql ? '<button class="btn" id="btn-new-sql" title="新建一个 SQL 脚本（dbscript/*.sql）">+ 新建 SQL</button>' : '';
+  $('#ws-body').innerHTML = `<div class="sec-title">代码 <span class="tlabel">${esc(f.parsed.engine ?? 'etl')} · ${uncommitted ? '未提交' : '与分支一致'}</span>${newSqlBtn}${uncommitted ? '<button class="btn primary" id="btn-commit">提交变更</button>' : ''}</div>
     <div class="ddl-view">${html}</div>
     <p class="note">${uncommitted ? '工作区修改未提交——提交后才会落到分支上。' : '代码与分支一致。'}改代码可以交给右侧 Agent。</p>`;
   const bc = document.getElementById('btn-commit');
   if (bc) bc.addEventListener('click', () => send('提交前先做本体推理扫描：对 ' + active.file + ' 走 get_anchored_object → policy_get_policies → policy_get_rules → rule_get_implementations → get_scan_plan → check_consistency，把扫描结论/一致性差异讲清楚。若存在差异，等我在会话里选择【修复】或【忽略并提交】；若扫描干净，直接 repo_commit 提交。', true));
+  const nb = document.getElementById('btn-new-sql');
+  if (nb) nb.addEventListener('click', async () => {
+    const name = prompt('新建 SQL 文件名（dbscript/ 下，.sql 结尾）', 'dbscript/' + String(active.file.split('/').pop() || 'alter_dwd_').replace(/\.[^.]+$/, '') + '_v4.sql');
+    if (!name) return;
+    if (!name.startsWith('dbscript/')) { toast('必须以 dbscript/ 开头'); return; }
+    const r = await api('/api/repo/sql-create', { method: 'POST', body: JSON.stringify({ path: name }) });
+    if (r.error) { toast('新建失败: ' + r.error); return; }
+    if (!r.created) { toast(r.reason || '文件已存在'); return; }
+    toast('已新建 ' + name + '（未提交）');
+    invalidateCaches(); await loadRepoTree();
+    openFile('repo', name);
+  });
 }
 /* 可视化 · 字段映射（V9 曲线 + 转换徽标框） */
 function viewFlow(f) {
@@ -945,7 +964,12 @@ function viewTest(f) {
 }
 /* 本体驱动扫描 · 扫描页签（V15 @his/domain-tools-ontology） */
 async function viewScriptScan(f) {
-  const d = await api('/api/repo/onto-scan?path=' + encodeURIComponent(active.file));
+  const key = active.file;
+  if (!scanCache[key]) {
+    scanCache[key] = await api('/api/repo/onto-scan?path=' + encodeURIComponent(key));
+    if (scanCache[key] && scanCache[key].error) { $('#ws-body').innerHTML = '<p class="note">' + esc(scanCache[key].error) + '</p>'; return; }
+  }
+  const d = scanCache[key];
   if (d.error) { $('#ws-body').innerHTML = '<p class="note">' + esc(d.error) + '</p>'; return; }
   const cls = d.classify, pol = d.policies || [], rl = d.rules, match = d.match, findings = d.findings || [], trace = d.trace || [], plan = d.scanPlan || null;
   if (!cls || !cls.ok) { $('#ws-body').innerHTML = '<p class="note">' + esc((cls && cls.note) || '本体分类失败（fail-closed 转人工归类）') + '</p>'; return; }
@@ -1079,7 +1103,12 @@ function renderOntoChain(chain) {
 }
 /* 血缘影响（作业级） */
 async function viewJobLineage(f) {
-  const L = await api('/api/repo/lineage?path=' + encodeURIComponent(active.file));
+  const key = active.file;
+  if (!lineageCache[key]) {
+    lineageCache[key] = await api('/api/repo/lineage?path=' + encodeURIComponent(key));
+    if (lineageCache[key] && lineageCache[key].error) { $('#ws-body').innerHTML = `<p class="note">${esc(lineageCache[key].error)}</p>`; return; }
+  }
+  const L = lineageCache[key];
   if (L.error) { $('#ws-body').innerHTML = `<p class="note">${esc(L.error)}</p>`; return; }
   const upTxt = (L.upstream.sources ?? []).map((s) => `${(s.producedBy ?? []).join('、') || '外部源'} → ${s.table}`).join('<br>') || '—';
   const downTxt = [...(L.downstream.readers ?? []), ...(L.downstream.dagDependents ?? [])].join('、') || '（无下游）';
@@ -1477,7 +1506,7 @@ function renderEvents(events) {
   }
   renderAudit();
   if (events.some((e) => e.type === 'tool/result' || e.type === 'tool/code-dispatch')) {
-    repoCache = {}; testResults = {};
+    invalidateCaches(); testResults = {};
     renderWorkspace(); loadModels(); loadRepoTree(); renderFileTabs();
   }
 }

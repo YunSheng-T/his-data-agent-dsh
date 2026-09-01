@@ -60,6 +60,47 @@ timeout: ${timeout}
 `
 }
 
+/** 生成 dbscript/*.sql（SQL 脚本作业，V15 新建能力）——模板可编辑，头部 @engine/@job/@target 注解供
+ * scanScriptJob 本体分类/一致性扫描识别；列级 @std/v 标准引用注释携带建模标准绑定，供与设计态对比。
+ * 与 genEtl 的分工：genEtl 生成 .etl（ETL 作业）；genSql 生成 .sql（数据库脚本 / DDL 订正类）。 */
+export function genSql({ path, engine = 'Hive SQL', target, columns = [], mode }) {
+  const job = path.split('/').pop().replace(/\.sql$/, '')
+  const targetTable = target ?? 'dwd.' + job
+  // 可解析结构（供 scanScriptJob / extractTable 识别 targetTable 并匹配模型 implements 关系）
+  if (mode !== 'query') {
+    const cols = columns.length
+      ? columns.map((c, i) => `  ${c.expr ?? c.name}${c.type ? ' ' + c.type : ''}${(i < columns.length - 1) ? ',' : ''} -- ${c.comment ?? ''}`).join('\n')
+      : `  -- 在此编写 DDL 订正列；逐列可挂 @std/v 标准引用注释（如 col_a STRING -- @std/tax_id v1）
+  col_a STRING
+  ,col_b DECIMAL(18,2)`
+    return `-- @job: ${job}
+-- @engine: ${engine}
+-- @target: ${targetTable}
+-- @kind: dbscript
+-- 本文件由 sql_create 新建（模板可编辑），用于数据库脚本 / DDL 订正；与模型设计态的一致性走本体扫描
+ALTER TABLE ${targetTable} ADD COLUMNS (
+${cols.trim()}
+);
+`
+  }
+  const cols = columns.length
+    ? columns.map((c, i) => `  ${c.expr ?? c.name}${(i < columns.length - 1) ? ',' : ''} -- ${c.comment ?? ''}`).join('\n')
+    : `  -- 在此编写查询列映射；逐列可挂 @std/v 标准引用注释（如 id -- @std/tax_id v1）
+  id
+  ,col_a
+  ,dt`
+  return `-- @job: ${job}
+-- @engine: ${engine}
+-- @target: ${targetTable}
+-- @kind: dbscript
+-- 本文件由 sql_create 新建（模板可编辑）；SELECT 查询型脚本
+SELECT
+${cols.trim()}
+FROM ${targetTable}
+WHERE dt = '\${bizdate}';
+`
+}
+
 /** 列级 diff 修改（修改链路）：AST 定位目标列，只动 .etl 的该列行 */
 export function patchColumn(text, { column, expr, comment }) {
   const parsed = parseEtl(text)

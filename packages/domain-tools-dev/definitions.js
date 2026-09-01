@@ -5,7 +5,8 @@
 
 import { parseEtl, parseDag, locateColumn } from './ast.js'
 import { lintEtl, lintDag } from './lint.js'
-import { genEtl, genDag, patchColumn } from './codegen.js'
+import { genEtl, genDag, genSql, patchColumn } from './codegen.js'
+import { extractTable, extractEngine } from '../domain-tools-ontology/ontology.js'
 import { upstream as lineageUp, downstream as lineageDown, jobsForModel } from './lineage.js'
 import { scanVerdict } from './provider-cicd.js'
 
@@ -141,6 +142,33 @@ export function buildDevTools({ repo, dryrun, modeling, sched, cicd, onto }) {
           warn: m.published ? null : '模型未发布：代码已生成但未发布模型的引用可能变动，正式上线前请先发布模型',
           lint,
         }
+      },
+    },
+
+    {
+      name: 'sql_create', risk: 'workspace-write',
+      description: '新建 SQL 脚本作业（dbscript/*.sql）到工作区未提交态：生成可编辑模板（@engine/@job/@target 注解头 + 列映射占位，逐列可挂 @std/v 标准引用注释）。用于数据库脚本 / DDL 订正类；新建后可与已提交版对比（dirty）、与模型设计态做一致性扫描。不覆盖已存在文件（存在则改走编辑/etl_patch）',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: '目标脚本路径，必须以 dbscript/ 开头、.sql 结尾，如 dbscript/alter_dwd_tax_payment_v4.sql' },
+          target: { type: 'string', description: '目标表，如 dwd.dwd_tax_payment；缺省取文件名尾' },
+          mode: { type: 'string', description: 'ddl（默认，ALTER TABLE ADD COLUMNS 订正型）或 query（SELECT 查询型）；缺省 ddl' },
+          columns: { type: 'array', items: { type: 'object', properties: { name: { type: 'string' }, expr: { type: 'string' }, type: { type: 'string' }, comment: { type: 'string' } } }, description: '可选列清单（name/expr/type/comment）；缺省生成占位列' },
+        },
+        required: ['path'],
+      },
+      output: jsonOut,
+      execute: async ({ path, target, columns, mode }) => {
+        if (!path.startsWith('dbscript/') || !path.endsWith('.sql')) throw new Error(`SQL 脚本必须放 dbscript/ 下且 .sql 结尾: ${path}`)
+        const existing = repo.readWorking(path) ?? repo.readCommitted(repo.currentBranch(), path)
+        if (existing != null) return { created: false, reason: `文件已存在: ${path}（不覆盖；编辑走 etl_patch / 手工改工作区）`, path }
+        const text = genSql({ path, target, columns, mode })
+        const written = repo.writeWorking(path, text)
+        const targetTable = extractTable(text)
+        const ast = parseEtl(text)
+        const colNames = ast.columns.map((c) => c.alias).filter(Boolean)
+        return { created: true, ...written, engine: extractEngine(text) ?? 'Hive SQL', targetTable, columns: colNames.length ? colNames : (columns || []).map((c) => c.name).filter(Boolean), note: '新建 .sql 到工作区未提交态；与模型设计态一致性走本体扫描，提交走 repo_commit（提交前预扫描）' }
       },
     },
 

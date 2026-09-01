@@ -220,6 +220,23 @@ async function route(ctx, req, res, url) {
       return json(res, 200, { path: p, kind, text, parsed })
     } catch (e) { return json(res, 400, { error: e.message }) }
   }
+  // 新建 SQL 脚本（dbscript/*.sql）到工作区未提交态：前端「新建 SQL」按钮调用，
+  // 语义与开发域 sql_create 工具一致；不跨包 import genSql，模板在此内联，可编辑。
+  if (url.pathname === '/api/repo/sql-create' && req.method === 'POST') {
+    const body = JSON.parse(await readBody(req))
+    const path = body.path
+    if (!path || !path.startsWith('dbscript/') || !path.endsWith('.sql')) return json(res, 400, { error: '必须 dbscript/ 下且 .sql 结尾: ' + path })
+    const target = body.target ?? 'dwd.' + path.split('/').pop().replace(/\.sql$/, '')
+    const existing = ctx.hisRepo.readWorking(path) ?? ctx.hisRepo.readCommitted(ctx.hisRepo.currentBranch(), path)
+    if (existing != null) return json(res, 200, { created: false, reason: `文件已存在: ${path}（不覆盖，编辑走右侧 Agent）` })
+    const cols = (body.columns && body.columns.length)
+      ? body.columns.map((c, i) => `  ${c.name}${c.type ? ' ' + c.type : ''}${i < body.columns.length - 1 ? ',' : ''} -- ${c.comment ?? ''}`).join('\n')
+      : '  -- 在此编写 DDL 订正列；逐列可挂 @std/v 标准引用注释（如 col_a STRING -- @std/tax_id v1）\n  col_a STRING\n  ,col_b DECIMAL(18,2)'
+    const job = path.split('/').pop().replace(/\.sql$/, '')
+    const text = `-- @job: ${job}\n-- @engine: Hive SQL\n-- @target: ${target}\n-- @kind: dbscript\n-- 本文件新建（模板可编辑），用于数据库脚本 / DDL 订正；与模型设计态的一致性走本体扫描\nALTER TABLE ${target} ADD COLUMNS (\n${cols}\n);\n`
+    const written = ctx.hisRepo.writeWorking(path, text)
+    return json(res, 200, { created: true, ...written, targetTable: (text.match(/ALTER\s+TABLE\s+(\S+)/i) || [])[1] ?? null, note: '新建 .sql 到工作区未提交态；提交走 repo_commit（提交前预扫描）' })
+  }
   // 本体驱动扫描（V15 @his/domain-tools-ontology）：对脚本作业做本体分类/策略/规则/增量匹配/归因，返回扫描数据供前端渲染
   if (url.pathname === '/api/repo/onto-scan') {
     const p = url.searchParams.get('path')
