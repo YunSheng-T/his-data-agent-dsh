@@ -21,14 +21,13 @@
         models:
           - id: internal-chat              # ← 换成网关上的真实模型 id
             contextWindow: 131072
+# 双模型路由（默认 DeepSeek，内部模型可切换）：dsh-base 默认提供 llm-deepseek(deepseek-official)，
+# 默认 agent-default-model 指向 deepseek-official（只要你设 DEEPSEEK_API_KEY 即可直接跑）；
+# 内部模型通过会话区下拉「内部模型」切换（需设 INTERNAL_LLM_API_KEY + baseURL 指向你的网关）。
 - id: agent-default-model
   config:
-    provider: internal-openai
-    model: internal-chat
-# 双模型路由（内部为默认，DeepSeek 可切换）：dsh-base 默认提供 llm-deepseek(deepseek-official)，
-# 保留它供「模型切换」切到外网 DeepSeek；默认仍是 internal-openai。切换经 settings 层
-# （agent-default-model 的 settings.yaml 覆盖 composition entry：用户层优先）。
-# 启动需设相应 key：内部设 INTERNAL_LLM_API_KEY，DeepSeek 设 DEEPSEEK_API_KEY（可都设）。
+    provider: deepseek-official
+    model: deepseek-v4-flash
 - id: tool-bash
   disabled: true
 - id: tool-pwsh

@@ -1695,7 +1695,9 @@ if (modelSel) modelSel.addEventListener('change', async (e) => {
   const model = provider === 'deepseek-official' ? 'deepseek-v4-flash' : 'internal-chat';
   const r = await api('/api/model/switch', { method: 'POST', body: JSON.stringify({ provider, model }) });
   if (r.error) { toast('模型切换失败: ' + r.error); loadModelSel(); return; }
-  toast('已切换到 ' + (provider === 'deepseek-official' ? 'DeepSeek' : '内部模型'));
+  // 切换只影响新会话：当前 agent 创建时已定死 provider/model，故清空 sessionId，下一条消息自动开新会话生效。
+  if (sessionId) { sessionId = null; lastSeq = -1; toast('模型已切换到 ' + (provider === 'deepseek-official' ? 'DeepSeek' : '内部模型') + '，下一条消息将用新会话（新模型）'); }
+  else toast('已切换到 ' + (provider === 'deepseek-official' ? 'DeepSeek' : '内部模型'));
 });
 loadModelSel();
 </script>
