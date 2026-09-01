@@ -1629,12 +1629,17 @@ $('#session-select').addEventListener('change', async (e) => {
   poll();
 });
 async function send(text, silent) {
+  // 防抖/防重：上一轮未结束（busy）时忽略新的发送——按钮连点只发一条，
+  // 避免「提交变更/修复/发送」连点给 Agent 塞多条重复消息（个数不稳定）。
+  if (busy) return;
   const t = (text ?? $('#prompt').value).trim();
   if (!t) return;
   if (!silent) $('#prompt').value = '';
-  const r = await api('/api/chat', { method: 'POST', body: JSON.stringify({ sessionId, text: t }) });
-  if (!sessionId) { sessionId = r.sessionId; $('#session-id').textContent = sessionId.slice(0, 18); }
   busy = true; turnStartAt = Date.now(); showThinking('已发送，等待响应');
+  try {
+    const r = await api('/api/chat', { method: 'POST', body: JSON.stringify({ sessionId, text: t }) });
+    if (!sessionId) { sessionId = r.sessionId; $('#session-id').textContent = sessionId.slice(0, 18); }
+  } catch (e) { busy = false; hideThinking(); toast('发送失败: ' + (e?.message || e)); return; }
   poll();
 }
 $('#send').addEventListener('click', () => send());
