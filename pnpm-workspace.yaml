@@ -1,0 +1,11 @@
+# pnpm 构造脚本批准（仓库根）
+# 若缺失或这些包未被批准，pnpm install 会把原生构建脚本忽略并报
+# ERR_PNPM_IGNORED_BUILDS（Run "pnpm approve-builds"），导致 pnpm run setup 失败。
+# 这里用 pnpm 的实际键 allowBuilds 把需要 build script 的包一律放行（true），
+# 新电脑 clone 后 pnpm run setup 一次通过，无需交互式 approve-builds。
+allowBuilds:
+  '@deepseek-ai/dsh-subprocess-local': true
+  '@google/genai': true
+  koffi: true
+  node-pty: true
+  protobufjs: true

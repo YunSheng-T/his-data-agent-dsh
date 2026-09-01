@@ -87,7 +87,7 @@ pnpm run test:regression
 
 > 新电脑常见坑：
 > - **Studio 起不来 / 报 `--expose-internals is required for HMR service`** → 用 `pnpm run studio`（启动器已带 flag），别直接 `node node_modules/.../bin.js`（会因 HMR 失败）。
-> - **`pnpm run setup` 报 `ERR_PNPM_IGNORED_BUILDS`** → 忽略构建脚本告警即可，不影响运行；若确实要跑 node-pty/koffi 等原生依赖，`pnpm approve-builds`。
+> - **`pnpm run setup` 报 `ERR_PNPM_IGNORED_BUILDS` / `Run "pnpm approve-builds"`** → 仓库根的 `pnpm-workspace.yaml` 已声明 `allowBuilds: true`（node-pty/koffi/protobufjs/@google/genai/dsh-subprocess-local），正常 clone + `pnpm run setup` 应一次通过。若仍报，先 `pnpm approve-builds --all` 或 `pnpm install --force` 重跑。
 > - **启动报「未设置模型密钥」** → 内部模型用 `export INTERNAL_LLM_API_KEY=xxx`（并确认 his-studio/his-agent-internal 的 cordis.patch.yml 里 `llm-pi-ai` 的 `baseURL` 已指向内网网关）；外网用 `export DEEPSEEK_API_KEY=sk-xxx`。环境变量不跨终端，开新终端要重设。
 > - Windows 用户：命令在 Git Bash / PowerShell 执行；`export` 换成 `$env:NAME = "..."`。
 
