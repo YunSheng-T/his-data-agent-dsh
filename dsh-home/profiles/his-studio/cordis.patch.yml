@@ -5,6 +5,23 @@
 #   - 新增 his-studio-ui 插件（node:http 三栏工作台，端口 HIS_STUDIO_PORT 默认 7300）
 # 安全边界与 his-data-agent 完全一致：关 shell/文件写/遥测，写操作只走域工具
 
+# 内网模型路由（OpenAI 兼容网关）：把 baseURL 换成内网网关地址，设 INTERNAL_LLM_API_KEY 即可，
+# 让 Studio 用内部模型，无需 DEEPSEEK_API_KEY。若想用外网 DeepSeek，删掉下面两段即可。
+- id: llm-pi-ai
+  config:
+    providers:
+      internal-openai:
+        displayName: 内网模型网关（OpenAI 兼容）
+        api: openai-completions
+        baseURL: http://127.0.0.1:8300/v1   # ← 换成你们内网网关地址（仅此一行）
+        apiKeyEnv: INTERNAL_LLM_API_KEY
+        models:
+          - id: internal-chat              # ← 换成网关上的真实模型 id
+            contextWindow: 131072
+- id: agent-default-model
+  config:
+    provider: internal-openai
+    model: internal-chat
 - id: tool-bash
   disabled: true
 - id: tool-pwsh

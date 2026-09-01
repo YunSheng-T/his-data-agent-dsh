@@ -72,8 +72,10 @@ cd his-data-agent-dsh
 # 2. 一键装依赖：根目录 + 三个 profile（his-data-agent / his-studio / his-agent-internal）
 pnpm run setup
 
-# 3. 设密钥（只需一次，只走环境变量，不落文件）
-export DEEPSEEK_API_KEY=sk-xxx      # PowerShell: $env:DEEPSEEK_API_KEY = "sk-xxx"
+# 3. 设模型密钥（只需一次，只走环境变量，不落文件）——二选一：
+#    内部模型（推荐，用 OpenAI 兼容内网网关）：export INTERNAL_LLM_API_KEY=xxx
+#    外网 DeepSeek：                          export DEEPSEEK_API_KEY=sk-xxx
+export INTERNAL_LLM_API_KEY=xxx      # PowerShell: $env:INTERNAL_LLM_API_KEY = "xxx"（用内部模型）；外网则 export DEEPSEEK_API_KEY=sk-xxx
 
 # 4. 启动三栏工作台（首启自动重建种子仓 runtime/repos、会话目录随用随建）
 pnpm run studio
@@ -86,7 +88,7 @@ pnpm run test:regression
 > 新电脑常见坑：
 > - **Studio 起不来 / 报 `--expose-internals is required for HMR service`** → 用 `pnpm run studio`（启动器已带 flag），别直接 `node node_modules/.../bin.js`（会因 HMR 失败）。
 > - **`pnpm run setup` 报 `ERR_PNPM_IGNORED_BUILDS`** → 忽略构建脚本告警即可，不影响运行；若确实要跑 node-pty/koffi 等原生依赖，`pnpm approve-builds`。
-> - **启动报「未设置 DEEPSEEK_API_KEY」** → 忘记 export，或开了新终端（环境变量不保留）。
+> - **启动报「未设置模型密钥」** → 内部模型用 `export INTERNAL_LLM_API_KEY=xxx`（并确认 his-studio/his-agent-internal 的 cordis.patch.yml 里 `llm-pi-ai` 的 `baseURL` 已指向内网网关）；外网用 `export DEEPSEEK_API_KEY=sk-xxx`。环境变量不跨终端，开新终端要重设。
 > - Windows 用户：命令在 Git Bash / PowerShell 执行；`export` 换成 `$env:NAME = "..."`。
 
 ## 运行
