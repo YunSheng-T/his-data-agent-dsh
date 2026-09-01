@@ -162,8 +162,12 @@ input,textarea,select{font-family:inherit}
 .anchor-bar .a-obj{font-family:var(--mono);font-size:11px;color:var(--ink);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .agent-head{padding:12px 16px 10px;border-bottom:1px solid var(--hair-soft);flex:none}
 .agent-head .a-name{font-size:13px;font-weight:700;display:flex;align-items:center;gap:8px}
-.agent-head .a-sub{font-size:11px;color:var(--muted);margin-top:3px;display:flex;justify-content:space-between;align-items:center;gap:8px}
-.agent-head select{font-size:10px;border:1px solid var(--hair);background:#fff;color:var(--muted);max-width:170px;border-radius:6px;padding:1px 4px}
+.agent-head .a-sub{font-size:11px;color:var(--muted);margin-top:5px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.agent-head .model-controls{display:flex;align-items:center;gap:6px;flex:none}
+.agent-head select{font-size:10px;border:1px solid var(--hair);background:#fff;color:var(--muted);border-radius:6px;padding:2px 6px;font-family:var(--sans)}
+.agent-head #provider-sel,.agent-head #model-sel{max-width:120px}
+.agent-head #session-select{max-width:110px}
+.agent-head select:focus{outline:none;border-color:var(--ink)}
 .agent-stream{flex:1;overflow-y:auto;padding:14px 14px 24px;min-height:0}
 .a-msg{margin:0 2px 14px}
 .a-who{display:flex;align-items:center;gap:7px;margin-bottom:5px}
@@ -419,7 +423,7 @@ input,textarea,select{font-family:inherit}
     <div class="anchor-bar"><span class="a-dot"></span><span class="a-txt">锚定</span><span class="a-obj" id="anchor-obj">—</span></div>
     <div class="agent-head">
       <div class="a-name">Data Agent <span class="tlabel green" id="agent-status">就绪</span></div>
-      <div class="a-sub"><span>写操作需你确认 · 独立于开发流程</span><select id="session-select"><option value="">新会话</option></select></div>
+      <div class="a-sub"><span>写操作需你确认</span><span class="model-controls"><select id="provider-sel" title="切换模型 provider"></select><select id="model-sel" title="切换模型"></select><select id="session-select"><option value="">新会话</option></select></span></div>
     </div>
     <div class="agent-stream" id="chat"></div>
     <div class="agent-composer">
@@ -429,7 +433,7 @@ input,textarea,select{font-family:inherit}
         <textarea id="prompt" rows="1" placeholder="就锚定对象提问或下指令…"></textarea>
         <button class="a-send" id="send">↑</button>
       </div>
-      <div class="a-meta"><span class="led"></span><select id="provider-sel" title="切换模型 provider"></select><select id="model-sel" title="切换模型"></select><span id="session-id"></span><span>写操作 · 需确认</span></div>
+      <div class="a-meta"><span class="led"></span><span id="session-id"></span><span>写操作 · 需确认</span></div>
     </div>
   </aside>
 </div>
