@@ -531,7 +531,7 @@ async function switchTenant(t) {
   openFiles = openFiles.filter((f) => f.kind !== 'repo');
   if (active.kind === 'repo') active = { kind: null, file: null };
   await loadRepoTree(); renderFileTabs(); renderWorkspace(); renderChips();
-  if (sessionId && r.current.dataTenant) setAnchor({ branch: r.branch, dir: '.' });
+  if (r.current.dataTenant) setAnchor({ branch: r.branch, dir: '.' });
 }
 const inDataTenant = () => tenantState.current.dataTenant !== false;
 
@@ -595,7 +595,7 @@ $('#branch-sel').addEventListener('change', async (e) => {
   openFiles = openFiles.filter((f) => f.kind !== 'repo');
   if (active.kind === 'repo') active = { kind: null, file: null };
   await loadRepoTree(); renderFileTabs(); renderWorkspace();
-  if (sessionId) setAnchor({ branch: e.target.value, dir: '.' });
+  setAnchor({ branch: e.target.value, dir: '.' });
 });
 
 /* ================= 文件页签（多开） ================= */
@@ -611,7 +611,9 @@ function openFile(kind, file) {
   renderFileTabs(); renderWorkspace(); loadModels(); loadRepoTree();
   anchorObj = kind === 'model' ? file : `${repoState.current} · ${file}`;
   $('#anchor-obj').textContent = anchorObj;
-  if (sessionId) setAnchor(kind === 'model' ? { file } : { branch: repoState.current, dir: file.split('/').slice(0, -1).join('/') });
+  // 切文件/锚点：无条件设后端锚点（不依赖是否有会话）——agent 提问时 get_anchored_object 才能读到正确 current；
+  // 之前 if(sessionId) 导致未发过消息就切文件时后端 current 未设 → 前端显示已锚定、后端却报未锚定。
+  setAnchor(kind === 'model' ? { file } : { branch: repoState.current, dir: file.split('/').slice(0, -1).join('/') });
 }
 function renderFileTabs() {
   $('#file-tabs').innerHTML = openFiles.map((f) => {
