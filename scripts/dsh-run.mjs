@@ -3,7 +3,7 @@
 // - dsh 可执行文件解析仓库根 node_modules/.bin（Windows 下为 dsh.cmd）
 // - DEEPSEEK_API_KEY 缺失时给出明确提示而不是闷死
 import { spawnSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { existsSync, writeFileSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 
@@ -37,6 +37,38 @@ if (!env.INTERNAL_LLM_API_KEY && !env.DEEPSEEK_API_KEY) {
   process.exit(1)
 }
 if (!env.INTERNAL_LLM_API_KEY && !env.DEEPSEEK_API_KEY) process.exit(1)
+
+// 双模型 profile（his-studio / his-agent-internal）：启动时按所设 key 自动定默认模型，
+// 写 dsh-home/settings.yaml 的 agent-default-model（运行时文件，不入库）。
+// 设了 INTERNAL_LLM_API_KEY → 默认 internal-openai（内网为主，符合 HIS 场景）；
+// 只设 DEEPSEEK_API_KEY → 默认 deepseek-official。用户也可在会话区下拉手动切。
+// 避免 cordis.patch.yml 里写死 provider 导致内网场景误落外网报错。
+// 仅接管 agent-default-model 段：保留用户已写的其它 settings 段（按行扫描，避免依赖 yaml 库）。
+const DUAL_PROFILES = new Set(['his-studio', 'his-agent-internal'])
+if (DUAL_PROFILES.has(profile)) {
+  const defaultProvider = env.INTERNAL_LLM_API_KEY ? 'internal-openai' : 'deepseek-official'
+  const defaultModel = defaultProvider === 'internal-openai' ? 'internal-chat' : 'deepseek-v4-flash'
+  try {
+    const sf = path.join(env.DSH_HOME, 'settings.yaml')
+    let doc = ''
+    if (existsSync(sf)) doc = readFileSync(sf, 'utf8')
+    // 去除已有的 agent-default-model 段（含到下一个非缩进键为止），再追加新段
+    const lines = doc ? doc.split(/\r?\n/) : []
+    const out = []
+    let skip = false
+    for (const ln of lines) {
+      if (/^agent-default-model\s*:/.test(ln)) { skip = true; continue }
+      if (skip && /^\S/.test(ln) ) { skip = false }
+      if (!skip) out.push(ln)
+    }
+    out.push(`agent-default-model:`)
+    out.push(`  provider: ${defaultProvider}`)
+    out.push(`  model: ${defaultModel}`)
+    writeFileSync(sf, out.join('\n') + '\n')
+  } catch (e) {
+    console.error(`[launcher] 设置默认模型失败（不影响启动）: ${e?.message ?? e}`)
+  }
+}
 
 // node --expose-internals <dsh 入口(相对 repoRoot)> --profile <profile> [args...]
 // cwd 已 process.chdir(repoRoot)，用相对路径保留 node 的模块解析上下文（NODE_PATH/.pnpm 语义）
