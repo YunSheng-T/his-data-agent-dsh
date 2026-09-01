@@ -14,9 +14,14 @@ env.DSH_HOME ??= path.join(repoRoot, 'dsh-home')
 // 从别的目录启动会静默丢掉「动手优先」等工作约定
 process.chdir(repoRoot)
 
-const bin = path.join(repoRoot, 'node_modules', '.bin', process.platform === 'win32' ? 'dsh.cmd' : 'dsh')
-if (!existsSync(bin)) {
-  console.error('未找到 dsh 可执行文件。请先在仓库根目录执行：pnpm run setup')
+// 直接用 node --expose-internals 起 dsh 入口（相对 repoRoot）：
+// dsh 的 cordis-plugin-hmr 要求 --expose-internals，否则 studio 的 HMR 加载器报
+// "expose-internals is required for HMR service" 导致 plugin tree 加载失败（本机/新电脑都中招）。
+// 经 .bin/dsh shim 无法附加该 flag 且 resolve .pnpm 深层路径会丢 NODE_PATH 上下文，
+// 故绕过 shim：以相对 repoRoot 的路径 + cwd=repoRoot 直接 node --expose-internals 起 dsh 入口。
+const dshEntry = path.join('node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
+if (!existsSync(dshEntry)) {
+  console.error('未找到 dsh 入口（node_modules/@deepseek-ai/dsh/lib/bin.js）。请先在仓库根目录执行：pnpm run setup')
   process.exit(1)
 }
 // 按 profile 校验凭据：内网网关 profile（his-agent-internal）走 INTERNAL_LLM_API_KEY，
@@ -38,9 +43,11 @@ if (!env[needKey]) {
   process.exit(1)
 }
 
-const r = spawnSync(bin, process.argv.slice(2), {
+// node --expose-internals <dsh 入口(相对 repoRoot)> --profile <profile> [args...]
+// cwd 已 process.chdir(repoRoot)，用相对路径保留 node 的模块解析上下文（NODE_PATH/.pnpm 语义）
+const r = spawnSync(process.execPath, ['--expose-internals', dshEntry, ...process.argv.slice(2)], {
   stdio: 'inherit',
   env,
-  shell: process.platform === 'win32', // .cmd 在 Windows 下必须经 shell
+  cwd: repoRoot,
 })
 process.exit(r.status ?? 1)
