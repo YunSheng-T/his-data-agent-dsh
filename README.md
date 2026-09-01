@@ -58,7 +58,36 @@ export DEEPSEEK_API_KEY=sk-xxx
 # 4. 启动（见下方「运行」节）
 ```
 
-> 依赖说明：`@deepseek-ai/dsh` 已声明在根 `package.json`（`dsh-base` bundle 是它的传递依赖，profile 不用单独装）；启动统一走 `scripts/dsh-run.mjs` 启动器——自动把 `DSH_HOME` 指向仓库内 `dsh-home`、解析仓内 `node_modules/.bin/dsh`，bash / PowerShell / cmd 行为一致。
+> 依赖说明：`@deepseek-ai/dsh` 已声明在根 `package.json`（`dsh-base` bundle 是它的传递依赖，profile 不用单独装）；启动统一走 `scripts/dsh-run.mjs` 启动器——自动把 `DSH_HOME` 指向仓库内 `dsh-home`、以 `node --expose-internals` 直起 dsh 入口（studio 的 HMR 插件要求该 flag，否则 plugin tree 加载失败；启动器已内置，无需手动加），bash / PowerShell / cmd 行为一致。
+
+## 在另一台电脑跑起来（从零到 Studio）
+
+**前提**：Node ≥ 20、pnpm、git 装好（见上方「前置依赖」）。
+
+```bash
+# 1. 克隆（HTTPS 或 SSH 均可；private 仓需有该仓权限）
+git clone git@github.com:YunSheng-T/his-data-agent-dsh.git
+cd his-data-agent-dsh
+
+# 2. 一键装依赖：根目录 + 三个 profile（his-data-agent / his-studio / his-agent-internal）
+pnpm run setup
+
+# 3. 设密钥（只需一次，只走环境变量，不落文件）
+export DEEPSEEK_API_KEY=sk-xxx      # PowerShell: $env:DEEPSEEK_API_KEY = "sk-xxx"
+
+# 4. 启动三栏工作台（首启自动重建种子仓 runtime/repos、会话目录随用随建）
+pnpm run studio
+# 浏览器打开 http://localhost:7300/ 即进入工作台
+
+# 5. （可选）跑一遍全量回归确认环境 OK
+pnpm run test:regression
+```
+
+> 新电脑常见坑：
+> - **Studio 起不来 / 报 `--expose-internals is required for HMR service`** → 用 `pnpm run studio`（启动器已带 flag），别直接 `node node_modules/.../bin.js`（会因 HMR 失败）。
+> - **`pnpm run setup` 报 `ERR_PNPM_IGNORED_BUILDS`** → 忽略构建脚本告警即可，不影响运行；若确实要跑 node-pty/koffi 等原生依赖，`pnpm approve-builds`。
+> - **启动报「未设置 DEEPSEEK_API_KEY」** → 忘记 export，或开了新终端（环境变量不保留）。
+> - Windows 用户：命令在 Git Bash / PowerShell 执行；`export` 换成 `$env:NAME = "..."`。
 
 ## 运行
 
@@ -72,7 +101,7 @@ pnpm run agent -- "你的建模任务指令"
 pnpm run studio
 # 然后浏览器打开 http://localhost:7300/
 
-# 全量回归（12 套断言；studio 未启动时自动跳过 studio 依赖型套件并明示）
+# 全量回归（17 套断言；studio 未启动时自动跳过 studio 依赖型套件并明示）
 pnpm run test:regression
 ```
 

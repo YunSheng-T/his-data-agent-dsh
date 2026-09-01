@@ -199,6 +199,61 @@ input,textarea,select{font-family:inherit}
 .a-card-body{padding:10px 12px;font-size:11px;color:var(--muted)}
 .a-verdict{display:flex;gap:8px;padding:0 12px 12px}
 .a-verdict .btn{flex:1;text-align:center}
+.a-card.decision{border-color:rgba(154,106,20,.6);box-shadow:0 2px 10px rgba(154,106,20,.12)}
+.a-card.decision .a-card-head{background:rgba(154,106,20,.08)}
+/* V15.2 · 会话流结构化卡片（对齐 DSH-Desktop：工具调用/结果/思考/步骤均为可折叠分段） */
+.a-fold{border:1px solid var(--hair);border-radius:10px;margin:0 2px 8px;background:rgba(255,255,255,.55);overflow:hidden}
+.a-fold-head{display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:7px 10px;font-size:11.5px;color:var(--ink);cursor:pointer;user-select:none}
+.a-fold-head:hover{background:var(--paper-deep)}
+.a-fold-head .f-dot{width:7px;height:7px;border-radius:50%;flex:none;background:var(--faint);transition:background .3s}
+.a-fold-head .f-dot.run{background:var(--term-green);animation:tpulse 1.1s ease-in-out infinite}
+.a-fold-head .f-dot.ok{background:var(--ok)}
+.a-fold-head .f-dot.err{background:var(--err)}
+.a-fold-head .f-name{font-family:var(--mono);font-size:10.5px;font-weight:600;flex:none}
+.a-fold-head .f-onto{font-size:8.5px;color:var(--muted);border:1px solid var(--hair);border-radius:99px;padding:0 6px;font-family:var(--mono);flex:none}
+.a-fold-head .f-sub{font-size:10.5px;color:var(--muted);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--mono)}
+.a-fold-head .f-chev{margin-left:auto;color:var(--faint);font-size:10px;flex:none;transition:transform .2s}
+.a-fold[open] .f-chev{transform:rotate(90deg)}
+.a-fold-body{padding:8px 10px;border-top:1px solid var(--hair-soft);font-size:11px;color:var(--muted)}
+.a-fold-body pre{margin:0;white-space:pre-wrap;word-break:break-all;font-family:var(--mono);font-size:10px;line-height:1.6;color:#3a382f}
+.a-fold-body .f-json{max-height:240px;overflow:auto;background:var(--paper);border:1px solid var(--hair-soft);border-radius:7px;padding:8px 10px;white-space:pre;font-family:var(--mono);font-size:10px;line-height:1.55;color:#3a382f}
+.a-fold-body .f-json .jk{color:#7a4dbb}
+.a-fold-body .f-json .js{color:#0a7a34}
+.a-fold-body .f-json .jn{color:#9a6a14}
+.a-fold-body .f-json .jb{color:#b02a44}
+.a-fold-body .f-err{color:var(--err)}
+.a-fold-body .f-summary{font-size:10.5px;color:var(--muted);padding-bottom:6px;font-family:var(--mono)}
+/* 步骤块：只做分组标题，不自带边框重叠 */
+.a-step{display:flex;align-items:center;gap:8px;margin:14px 0 6px;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint)}
+.a-step::after{content:"";flex:1;height:1px;background:var(--hair-soft)}
+/* 思考块：比工具卡更弱化的折叠 */
+.a-think .f-name{color:var(--faint)}
+.a-think .f-body-text{white-space:pre-wrap;color:var(--muted);font-size:11px;line-height:1.7}
+/* 扫描结论卡片（V15.3） */
+.sv-card{border:1px solid var(--hair);border-radius:11px;margin:12px 0 4px;background:rgba(255,255,255,.6);overflow:hidden}
+.sv-card.ok{border-color:rgba(31,138,76,.5)}
+.sv-card.warn{border-color:rgba(154,106,20,.5)}
+.sv-card.err{border-color:rgba(176,42,68,.5)}
+.sv-head{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--hair-soft);background:var(--paper)}
+.sv-verdict{font-size:12.5px;font-weight:700;flex:none;padding:2px 12px;border-radius:99px}
+.sv-verdict.ok{color:var(--ok);border:1px solid rgba(31,138,76,.4)}
+.sv-verdict.warn{color:var(--warn);border:1px solid rgba(154,106,20,.4)}
+.sv-verdict.err{color:var(--err);border:1px solid rgba(176,42,68,.4)}
+.sv-text{font-size:11.5px;color:var(--muted)}
+.sv-body{padding:6px 14px}
+.sv-row{display:flex;align-items:baseline;gap:8px;padding:4px 0;font-size:11.5px;border-bottom:1px dashed var(--hair-soft)}
+.sv-row:last-child{border-bottom:none}
+.sv-st{font-family:var(--mono);flex:none;width:14px}
+.sv-st.ok{color:var(--ok)} .sv-st.err{color:var(--err)} .sv-st.dim{color:var(--faint)}
+.sv-k{font-weight:600;flex:none;width:64px;color:var(--ink)}
+.sv-n{color:var(--muted)}
+.sv-fix{padding:8px 14px;border-top:1px solid var(--hair-soft);background:rgba(154,106,20,.05)}
+.sv-fix-row{font-size:11px;color:var(--warn);padding:3px 0;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.sv-fix-action{font-family:var(--mono);font-size:10px;color:var(--ok);border:1px solid rgba(31,138,76,.4);border-radius:99px;padding:0 8px;flex:none}
+.sv-note{padding:6px 14px;font-size:10px;color:var(--faint);font-family:var(--mono);border-top:1px solid var(--hair-soft)}
+.sv-commitbar{display:flex;align-items:center;gap:12px;margin:10px 0 4px;padding:10px 14px;border:1px solid var(--hair);border-radius:11px;background:rgba(255,255,255,.6)}
+.sv-commit-tip{font-size:11.5px;color:var(--muted);flex:1}
+.sv-commitbar .btn{flex:none}
 .agent-composer{flex:none;border-top:1px solid var(--hair);padding:10px 14px 12px}
 .a-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:9px}
 .a-chip{font-size:11px;color:var(--muted);border:1px solid var(--hair);border-radius:99px;padding:4px 11px}
@@ -827,9 +882,12 @@ function viewCode(f) {
   const html = esc(f.text)
     .replace(/(--\s*@[^\n]*)/g, '<span class="an">$1</span>')
     .replace(/(--[^\n]*)/g, (c) => c.startsWith('<span') ? c : `<span class="cm">${c}</span>`);
-  $('#ws-body').innerHTML = `<div class="sec-title">代码 <span class="tlabel">${esc(f.parsed.engine ?? 'etl')} · ${ent?.dirty || ent?.uncommitted ? '未提交' : '与分支一致'}</span></div>
+  const uncommitted = ent && (ent.dirty || ent.uncommitted);
+  $('#ws-body').innerHTML = `<div class="sec-title">代码 <span class="tlabel">${esc(f.parsed.engine ?? 'etl')} · ${uncommitted ? '未提交' : '与分支一致'}</span>${uncommitted ? '<button class="btn primary" id="btn-commit">提交变更</button>' : ''}</div>
     <div class="ddl-view">${html}</div>
-    <p class="note">${ent?.dirty || ent?.uncommitted ? '工作区修改未提交——提交后才会落到分支上。' : '代码与分支一致。'}改代码可以交给右侧 Agent。</p>`;
+    <p class="note">${uncommitted ? '工作区修改未提交——提交后才会落到分支上。' : '代码与分支一致。'}改代码可以交给右侧 Agent。</p>`;
+  const bc = document.getElementById('btn-commit');
+  if (bc) bc.addEventListener('click', () => send('提交前先做本体推理扫描：对 ' + active.file + ' 走 get_anchored_object → policy_get_policies → policy_get_rules → rule_get_implementations → get_scan_plan → check_consistency，把扫描结论/一致性差异讲清楚。若存在差异，等我在会话里选择【修复】或【忽略并提交】；若扫描干净，直接 repo_commit 提交。', true));
 }
 /* 可视化 · 字段映射（V9 曲线 + 转换徽标框） */
 function viewFlow(f) {
@@ -908,6 +966,8 @@ async function viewScriptScan(f) {
     }).join('');
     h += '<div class="note">识别依据：' + esc(an.why || '') + '</div><div style="margin-top:6px">' + relChips + '</div>';
   }
+  // —— 扫描结论主视图（三态 + 差异明细）：一眼看「通过 / 有差异 / 阻断」 ——
+  h += scanVerdictHtml(d.scan, d.scanVerdict, resultFixHtml(d));
   // —— 本体推理链 · X6 图（对齐 ER 图容器）：锚定对象 → ObjectType → 沿本体边 → Platform/Policy/Rule → RuleImpl ——
   if (d.chain && d.chain.ok && d.chain.nodes && d.chain.nodes.length) {
     h += '<div class="tlabel" style="margin:14px 0 8px">本体推理链 · ' + esc(d.chain.derivedFrom || '现场派生') + '</div>';
@@ -1124,6 +1184,39 @@ function mdInline(t) {
     .replace(/`([^`]+)`/g, '<code>$1</code>')
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
 }
+/* 扫描结论主视图（V15.3）：三态 verdict + 设计质量/SQL/一致性明细 + 修复建议 */
+function scanVerdictHtml(scan, verdict, fixHtml) {
+  if (!scan) return '<p class="note">该作业暂无扫描（可能未提交或本体未挂载）。</p>';
+  const V = verdict || 'pass';
+  const conf = {
+    pass: { cls: 'ok', icon: '✓', label: '通过', text: '设计质量 / SQL / 一致性全部通过，可提交。' },
+    'pass-unknown': { cls: 'warn', icon: '~', label: '通过（一致性未知）', text: '设计/质量/SQL 通过，但一致性未匹配到模型（无基线可比）。' },
+    diff: { cls: 'err', icon: '!', label: '有差异 · 需处理', text: '存在需处理的扫描差异，提交前请先修复或人工确认。' },
+    'no-scan': { cls: 'warn', icon: '—', label: '未扫描', text: '当前文件未能生成扫描快照。' },
+  }[V] || { cls: 'warn', icon: '?', label: V, text: '' };
+  const des = scan.design, sql = scan.sql, con = scan.consistency;
+  const row = (label, pass, note, extra) => {
+    const st = pass === true ? 'ok' : pass === false ? 'err' : 'dim';
+    const sym = pass === true ? '✓' : pass === false ? '✗' : '—';
+    return '<div class="sv-row"><span class="sv-st ' + st + '">' + sym + '</span><span class="sv-k">' + esc(label) + '</span><span class="sv-n">' + esc(note || '') + '</span>' + (extra || '') + '</div>';
+  };
+  const designRows = (des && des.issues && des.issues.length ? des.issues : [])
+    .map((i) => row(i.kind === 'error' ? 'error' : 'warn', i.level !== 'error', i.message)).join('') || row('规范性', des && des.pass, des ? (des.errors ? des.errors + ' error · ' + des.warns + ' warn' : '无 issue') : '—');
+  const sqlRows = (sql && sql.dangers && sql.dangers.length ? sql.dangers : [])
+    .map((dg) => row('SQL', false, dg)).join('') || row('SQL', sql && sql.pass, sql ? (sql.dangers ? sql.dangers.join('、') : '无危险模式') : '—');
+  const conRows = (con && con.diffs && con.diffs.length ? con.diffs : [])
+    .map((dg) => row('一致性', false, dg.issue)).join('') || row('一致性', con && con.pass, con ? (con.pass === null ? con.reason : 'MATCH 完全一致') : '—');
+  return '<div class="sv-card ' + conf.cls + '"><div class="sv-head"><span class="sv-verdict ' + conf.cls + '">' + conf.icon + ' ' + esc(conf.label) + '</span><span class="sv-text">' + esc(conf.text) + '</span></div>'
+    + '<div class="sv-body">' + designRows + sqlRows + conRows + '</div>'
+    + (fixHtml ? '<div class="sv-fix">' + fixHtml + '</div>' : '')
+    + '<div class="sv-note">' + esc((scan.ontology && scan.ontology.matchStatus) ? '本体对账状态：' + scan.ontology.matchStatus : '') + '</div></div>';
+}
+function resultFixHtml(d) {
+  const fs = (d.findings || []).filter((f) => f.fix);
+  if (!fs.length) return '';
+  return fs.map((f) => '<div class="sv-fix-row"><b>' + esc(f.id) + ' · ' + esc(f.target) + '</b>：' + esc(f.desc || '') + '<span class="sv-fix-action">修复 ' + esc(f.fix.from) + '→' + esc(f.fix.to) + '</span></div>').join('');
+}
+
 function mdToHtml(src) {
   const pres = [];
   const s = String(src ?? '').replace(/```[a-zA-Z]*\n?([\s\S]*?)(?:```|$)/g, (m, code) => {
@@ -1175,21 +1268,90 @@ function termBlock(lines) {
   }
   appendChat(el);
 }
-let pendingTermLines = [];
-function flushTerm() { if (pendingTermLines.length) { termBlock(pendingTermLines); pendingTermLines = []; } }
+
+/* V15.2 会话流结构化卡片（DSH 风格）：工具调用/结果/思考/步骤均为可折叠分段 */
+const foldState = { tools: new Map(), think: null };
+function foldCard(kind, name, sub, opts = {}) {
+  const el = document.createElement('div');
+  el.className = 'a-fold' + (kind === 'think' ? ' a-think' : '');
+  el.dataset.kind = kind;
+  el.innerHTML = '<button class="a-fold-head" type="button">'
+    + '<span class="f-dot ' + (opts.state || '') + '"></span>'
+    + '<span class="f-name">' + esc(name) + '</span>'
+    + (opts.onto ? '<span class="f-onto">ontology-function</span>' : '')
+    + '<span class="f-sub">' + esc(sub || '') + '</span>'
+    + '<span class="f-chev">▸</span></button>'
+    + '<div class="a-fold-body" style="display:none"></div>';
+  el.querySelector('.a-fold-head').addEventListener('click', () => {
+    const b = el.querySelector('.a-fold-body');
+    const open = b.style.display !== 'none';
+    b.style.display = open ? 'none' : 'block';
+    el.toggleAttribute('open', !open);
+  });
+  appendChat(el);
+  return el;
+}
+function foldBodySet(el, html) { el.querySelector('.a-fold-body').innerHTML = html; }
+function foldBodyAppend(el, node) { el.querySelector('.a-fold-body').appendChild(node); }
+function jsonPreviewText(obj) {
+  if (obj == null) return '';
+  if (typeof obj !== 'object') return String(obj);
+  const entries = Object.entries(obj);
+  const keys = entries.slice(0, 6).map(([k, v]) => k + ': ' + (typeof v === 'object' ? (Array.isArray(v) ? '[' + v.length + ']' : '{…}') : JSON.stringify(v)));
+  return keys.join(' · ') + (entries.length > 6 ? ' · …共 ' + entries.length + ' 键' : '');
+}
+// 高亮 JSON（紧凑）：把 JSON.stringify(obj, null, 2) 逐行上色，不嵌套 DOM 树
+function renderJsonTree(obj, maxDepth) {
+  const json = JSON.stringify(obj, null, 2);
+  if (json == null) return '';
+  return json.replace(/("(?:\\u[0-9a-fA-F]{4}|\\[^u]|[^\\"])*"(?:\s*:)?|\b(?:true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, (m) => {
+    if (/^"/.test(m)) {
+      const cls = /:$/.test(m) ? 'jk' : 'js';
+      return '<span class="' + cls + '">' + esc(m) + '</span>';
+    }
+    return /^(true|false|null)$/.test(m) ? '<span class="jb">' + m + '</span>' : '<span class="jn">' + m + '</span>';
+  });
+}
 function addMsg(cls, text, who) {
-  flushTerm();
   const el = document.createElement('div');
   el.className = 'a-msg' + (cls === 'user' ? ' user' : '');
   const ava = cls === 'user' ? 'human' : cls === 'anchor' ? 'plugin' : 'agent';
-  el.innerHTML = `<div class="a-who"><span class="a-ava ${ava}"></span><span class="who">${who}</span></div>`;
+  el.innerHTML = '<div class="a-who"><span class="a-ava ' + ava + '"></span><span class="who">' + who + '</span></div>';
   const body = document.createElement('div');
   if (cls === 'agent') { body.className = 'a-body md'; body.innerHTML = mdToHtml(text); }
   else { body.className = 'a-body'; body.textContent = text; }
   el.appendChild(body);
   appendChat(el);
 }
-function addTrace(text, isErr) { pendingTermLines.push([text, isErr]); }
+function addStepLabel(step) {
+  const el = document.createElement('div');
+  el.className = 'a-step';
+  el.textContent = '步骤 ' + step;
+  appendChat(el);
+  return el;
+}
+function addTrace(text, isErr) { /* V15.2：步骤/工具走结构化卡片，不再平铺文本行 */ }
+/* 扫描差异决策卡：Agent 呈现代理结论后，用可点击按钮承接【修复 / 忽略并提交】，无需用户打字 */
+function renderDecisionCard(filePath, hasDiff) {
+  const el = document.createElement('div');
+  el.className = 'a-card decision';
+  el.innerHTML = '<div class="a-card-head"><span class="c-title">⚠ 提交前扫描差异已确认</span></div>'
+    + '<div class="a-card-body">' + esc(filePath ? '文件 ' + filePath : '当前作业') + ' 存在差异，请选择处理方式：'
+    + (hasDiff ? ' <span style="color:var(--warn)">「修复」对齐设计后复扫，或「忽略并提交」放行。</span>' : '') + '</div>'
+    + '<div class="a-verdict">'
+    + '<button class="btn primary" id="dec-fix">修复</button>'
+    + '<button class="btn danger" id="dec-force">忽略并提交</button>'
+    + '<button class="btn" id="dec-cancel">取消</button></div>';
+  appendChat(el);
+  document.getElementById('dec-fix').addEventListener('click', () => {
+    el.remove(); send('修复 ' + filePath + ' 的扫描差异：把 SQL 字段类型对齐设计 DECIMAL(10,4)，完成后复扫确认清零，再走 repo_commit 提交', true);
+  });
+  document.getElementById('dec-force').addEventListener('click', () => {
+    el.remove(); send('忽略差异，提交工作区变更 ' + filePath + '（repo_commit force=true 显式放行）', true);
+  });
+  document.getElementById('dec-cancel').addEventListener('click', () => { el.remove(); send('先不提交', true); });
+  return el;
+}
 
 /* ---- 运行进展心跳：输入区上方固定条，不进会话流、不抢滚动 ---- */
 let busy = false;         // 本 turn 是否在进行中
@@ -1233,13 +1395,31 @@ function renderEvents(events) {
       // 其余注入（goal 轮次 / skill 目录 / 系统快照）是 Agent 内部上下文，不进会话流
     } else if (e.type === 'assistant/message') {
       const t = (d.message?.content ?? []).filter((b) => b.type === 'text').map((b) => b.text).join('');
-      if (t) addMsg('agent', t, 'Data Agent');
+      if (t) { addMsg('agent', t, 'Data Agent'); }
+      if (t && /【修复】|【忽略并提交】|请选择|修复.*忽略.*提交/.test(t)) {
+        // 命中「修复 / 忽略并提交」决策点 → 弹审核按钮（用当前锚定文件；同 turn 只弹一次）
+        const fp = active.file || (repoState.current && repoState.current);
+        if (!renderDecisionCard.done) { renderDecisionCard.done = true; renderDecisionCard(fp, true); }
+      }
     } else if (e.type === 'turn/start') {
+      renderDecisionCard.done = false;
       busy = true; turnStartAt = Date.now(); showThinking('启动');
     } else if (e.type === 'step/start') {
       showThinking(`步骤 ${d.step}`);
-      addTrace(`── 步骤 ${d.step} ──`);
-    } else if (e.type === 'assistant/chunk' || e.type === 'text-chunks' || e.type === 'reasoning-chunks') {
+      addStepLabel(d.step);
+      foldState.tools = new Map(); foldState.think = null;
+    } else if (e.type === 'reasoning-chunks') {
+      if (busy) showThinking('思考中');
+      const t = (d.texts ?? []).join('');
+      if (t) {
+        if (!foldState.think) {
+          foldState.think = foldCard('think', '思考', '', {});
+          foldBodySet(foldState.think, '<div class="f-body-text"></div>');
+        }
+        const box = foldState.think.querySelector('.f-body-text');
+        box.textContent += t;
+      }
+    } else if (e.type === 'assistant/chunk' || e.type === 'text-chunks') {
       if (busy) showThinking('模型生成中');
     } else if (e.type === 'tool/call') {
       showThinking(`调用工具 ${d.name}`);
@@ -1247,27 +1427,54 @@ function renderEvents(events) {
       let argObj = {}; try { argObj = typeof d.arguments === 'string' ? JSON.parse(d.arguments || '{}') : (d.arguments ?? {}); } catch {}
       const label = ontoToolLabel(d.name, argObj);
       const argTxt = Object.keys(argObj).length ? JSON.stringify(argObj) : '';
-      pendingTermLines.push([`${isOnto ? '$ ⬢ [ontology-function]' : '$'} ${label} ${argTxt}`]);
+      const card = foldCard('tool', label, argTxt, { onto: isOnto, state: 'run' });
+      card.dataset.toolName = d.name;
+      card.dataset.callId = d.callId;
+      foldBodySet(card, '<div class="f-summary">调用中…</div>');
+      foldState.tools.set(d.callId, card);
     } else if (e.type === 'tool/code-dispatch') {
       showThinking(`工具 ${d.name}`);
-      pendingTermLines.push([`  ↳ ${d.name}(${(typeof d.arguments === 'string' ? d.arguments : JSON.stringify(d.arguments ?? '')).slice(0, 90)})`, d.isError]);
+      const isOnto = ONTO_TOOLS.has(d.name);
+      let argObj = {}; try { argObj = typeof d.arguments === 'string' ? JSON.parse(d.arguments || '{}') : (d.arguments ?? {}); } catch {}
+      const label = ontoToolLabel(d.name, argObj);
+      const card = foldCard('tool', label, d.isError ? '执行出错' : '', { onto: isOnto, state: d.isError ? 'err' : 'ok' });
+      card.dataset.toolName = d.name;
+      card.dataset.callId = d.callId;
+      foldBodySet(card, d.isError ? '<div class="f-err">' + esc(d.message || '执行失败') + '</div>' : '<div class="f-summary">已执行</div>');
+      foldState.tools.set(d.callId, card);
     } else if (e.type === 'tool/result') {
       showThinking('工具返回');
       for (const b of d.message?.content ?? []) {
         if (b.type !== 'tool-result') continue;
-        const t = (b.content ?? []).map((c) => c.text ?? '').join('').slice(0, 300);
-        pendingTermLines.push([t, b.isError]);
+        const isErr = !!b.isError;
+        let parsed = null, raw = '';
+        const text = (b.content ?? []).map((c) => c.text ?? '').join('');
+        try { parsed = JSON.parse(text); raw = JSON.stringify(parsed, null, 2); } catch { raw = text; }
+        const callId = d.message?.source?.callId || b.toolCallId || d.callId;
+        let card = callId ? foldState.tools.get(callId) : null;
+        if (card) card.dataset.toolName = card.dataset.toolName || d.name;
+        if (!card) {
+          const isOnto = ONTO_TOOLS.has(d.name);
+          card = foldCard('tool', d.name, '', { onto: isOnto, state: isErr ? 'err' : 'ok' });
+          card.dataset.toolName = d.name;
+        }
+        const dot = card.querySelector('.f-dot');
+        dot.className = 'f-dot ' + (isErr ? 'err' : 'ok');
+        const preview = parsed && typeof parsed === 'object' ? jsonPreviewText(parsed) : (raw || '').slice(0, 80);
+        const sub = card.querySelector('.f-sub');
+        if (sub) sub.textContent = preview;
+        foldBodySet(card, (isErr ? '<div class="f-err">' + esc(raw || '执行失败') + '</div>' : '<pre class="f-json">' + (parsed && typeof parsed === 'object' ? renderJsonTree(parsed) : esc(raw)) + '</pre>'));
       }
     } else if (e.type === 'approval/asked') {
       showThinking('等待你确认写操作');
     } else if (e.type === 'approval/decided') {
-      pendingTermLines.push([`审批 ${d.outcome === 'allowed-once' ? '✓ 已确认' : '✗ 已打回'}`, d.outcome !== 'allowed-once']);
+      const card = foldCard('approve', '审批', d.outcome === 'allowed-once' ? '✓ 已确认' : '✗ 已打回', { state: d.outcome === 'allowed-once' ? 'ok' : 'err' });
+      foldBodySet(card, '<div>' + (d.outcome === 'allowed-once' ? '已确认执行' : '已打回') + '</div>');
     } else if (e.type === 'turn/end') {
       busy = false; hideThinking();
     }
     lastSeq = Math.max(lastSeq, e.seq);
   }
-  flushTerm();
   renderAudit();
   if (events.some((e) => e.type === 'tool/result' || e.type === 'tool/code-dispatch')) {
     repoCache = {}; testResults = {};
@@ -1277,7 +1484,6 @@ function renderEvents(events) {
 function renderPendingApprovals(list) {
   document.querySelectorAll('.a-card.approval').forEach((el) => el.remove());
   for (const p of list) {
-    flushTerm();
     const el = document.createElement('div');
     el.className = 'a-card approval';
     el.innerHTML = `<div class="a-card-head"><span class="c-title">⚠ 写操作待确认 · ${p.toolName}</span></div>
