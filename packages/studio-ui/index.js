@@ -20,7 +20,7 @@ import { scanScriptJob } from '../domain-tools-dev/definitions.js'
 import { fileURLToPath } from 'node:url'
 
 export const name = 'his-studio-ui'
-export const inject = ['tools', 'agents', 'sessions', 'agentDefaultModel', 'hisModeling', 'hisRepo', 'hisDevAst', 'hisDryrun', 'hisCicd', 'hisOps', 'hisOntology', 'hisAnchor']
+export const inject = ['tools', 'agents', 'sessions', 'agentDefaultModel', 'llm', 'hisModeling', 'hisRepo', 'hisDevAst', 'hisDryrun', 'hisCicd', 'hisOps', 'hisOntology', 'hisAnchor']
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const PORT = Number(process.env.HIS_STUDIO_PORT ?? 7300)
@@ -204,6 +204,22 @@ async function route(ctx, req, res, url) {
       const r = await ctx.hisAnchor.anchor(body)
       return json(res, 200, { ok: true, anchored: r })
     } catch (e) { return json(res, 400, { error: e.message }) }
+  }
+  // 列出已注册的 LLM provider（动态，含 internal-openai、deepseek-official 及用户 settings 里加的自定义网关）
+  if (url.pathname === '/api/llm/providers' && req.method === 'GET') {
+    try {
+      const providers = ctx.llm.listProviders()
+      return json(res, 200, { providers })
+    } catch (e) { return json(res, 500, { error: e.message }) }
+  }
+  // 列出某 provider 的可用模型（动态，供前端模型下拉）
+  if (url.pathname === '/api/llm/models' && req.method === 'GET') {
+    const provider = url.searchParams.get('provider')
+    if (!provider) return json(res, 400, { error: 'provider required' })
+    try {
+      const models = await ctx.llm.listModels(provider)
+      return json(res, 200, { models })
+    } catch (e) { return json(res, 500, { error: e.message }) }
   }
   // 读当前默认模型（会话区下拉初始值）
   if (url.pathname === '/api/model' && req.method === 'GET') {

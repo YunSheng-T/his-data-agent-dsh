@@ -10,6 +10,20 @@
 # ⚠ 只改 baseURL 那一行的值！models/api/apiKeyEnv/displayName 必须整段保留：
 #   cordis patch 是按 id 整块替换 config（不合并），删掉 models 会让这个用户自定义
 #   provider「internal-openai」解析不出模型 → 启动即报 plugin tree failed / resolves no models。
+#
+# 「各用各的 provider」：internal-openai 只是内置默认之一；用户可在 dsh-home/settings.yaml 写
+# llm-pi-ai 段加自己的 OpenAI 兼容网关（dsh 原生 providers dict 动态增删，重启热加载）：
+#   llm-pi-ai:
+#     providers:
+#       my-gateway:
+#         displayName: 我的网关
+#         api: openai-completions
+#         baseURL: https://gateway.example.com/v1
+#         apiKeyEnv: MY_GATEWAY_API_KEY
+#         models:
+#           - id: my-model
+#             contextWindow: 131072
+#   然后设 MY_GATEWAY_API_KEY，会话区 provider 下拉即可看到 my-gateway 并切换。
 - id: llm-pi-ai
   config:
     providers:

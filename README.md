@@ -146,6 +146,28 @@ pnpm run agent:internal -- "你的任务指令"
 - **ops_* 工具不存在 / 日志无 `[domain-tools-ops] registered`** → profile 依赖没装或代码不是最新：`git pull` 后重跑 `pnpm run setup`，启动日志应看到 `domain-tools-ops registered: ops_screen…ops_callback · 作业目录 8 个`。
 - 内网无 zstd 时旅程类断言跑不了（纯静态断言不受影响），见「前置依赖」节。
 
+## 各用各的模型 Provider（Studio 会话区动态切换）
+
+Studio（his-studio）支持多模型路由，不同用户可各自配自己的 OpenAI 兼容网关，不必互相踩、不必改代码。默认按所设环境变量自动定：设 `INTERNAL_LLM_API_KEY` → 内网 `internal-openai`；只设 `DEEPSEEK_API_KEY` → 外网 `deepseek-official`。
+
+- **会话区 provider/model 下拉是动态的**：provider 下拉列 dsh-llm 已注册的全部 provider（含内置 `internal-openai`、`deepseek-official` 及你在 settings.yaml 里加的自定义网关），model 下拉列该 provider 的模型。切换后**下一条消息用新会话生效**（旧会话 agent 已定死模型不换）。
+- **加自定义网关（一次配置）**：在 `dsh-home/settings.yaml` 写 `llm-pi-ai` 段（dsh 原生 providers dict，重启热加载）：
+
+```yaml
+llm-pi-ai:
+  providers:
+    my-gateway:                 # 任意小写连字符 id
+      displayName: 我的网关
+      api: openai-completions   # OpenAI 兼容协议
+      baseURL: https://gateway.example.com/v1
+      apiKeyEnv: MY_GATEWAY_API_KEY   # 从这个环境变量读 key（只记名，不落 key）
+      models:
+        - id: my-model
+          contextWindow: 131072
+```
+
+  然后 `export MY_GATEWAY_API_KEY=xxx` 并重启 Studio，会话区 provider 下拉即出现 `my-gateway`，可切换。默认模型选择（`agent-default-model`）持久化在同一个 settings.yaml，launcher 不会在启动时覆盖你已选好的 provider/model。
+
 ## 关键约定
 
 - **risk 标注是自有约定**（挂在 ToolDefinition 对象上），审批插件只认标注不认工具名；未标注 fail-closed。

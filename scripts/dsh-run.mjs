@@ -38,33 +38,23 @@ if (!env.INTERNAL_LLM_API_KEY && !env.DEEPSEEK_API_KEY) {
 }
 if (!env.INTERNAL_LLM_API_KEY && !env.DEEPSEEK_API_KEY) process.exit(1)
 
-// 双模型 profile（his-studio / his-agent-internal）：启动时按所设 key 自动定默认模型，
-// 写 dsh-home/settings.yaml 的 agent-default-model（运行时文件，不入库）。
-// 设了 INTERNAL_LLM_API_KEY → 默认 internal-openai（内网为主，符合 HIS 场景）；
-// 只设 DEEPSEEK_API_KEY → 默认 deepseek-official。用户也可在会话区下拉手动切。
-// 避免 cordis.patch.yml 里写死 provider 导致内网场景误落外网报错。
-// 仅接管 agent-default-model 段：保留用户已写的其它 settings 段（按行扫描，避免依赖 yaml 库）。
+// 双模型 profile（his-studio / his-agent-internal）：仅在 settings.yaml 尚无 agent-default-model
+// 选择时，按所设 key 写一次默认（运行时文件，不入库，可被用户会话区下拉覆盖）。
+// 已存在则绝不覆盖——尊重用户手动选择的 provider/model（各用各的 provider 场景下不应被启动重置）。
+// 设了 INTERNAL_LLM_API_KEY → 默认 internal-openai；只设 DEEPSEEK_API_KEY → 默认 deepseek-official。
 const DUAL_PROFILES = new Set(['his-studio', 'his-agent-internal'])
 if (DUAL_PROFILES.has(profile)) {
   const defaultProvider = env.INTERNAL_LLM_API_KEY ? 'internal-openai' : 'deepseek-official'
   const defaultModel = defaultProvider === 'internal-openai' ? 'internal-chat' : 'deepseek-v4-flash'
   try {
     const sf = path.join(env.DSH_HOME, 'settings.yaml')
-    let doc = ''
-    if (existsSync(sf)) doc = readFileSync(sf, 'utf8')
-    // 去除已有的 agent-default-model 段（含到下一个非缩进键为止），再追加新段
-    const lines = doc ? doc.split(/\r?\n/) : []
-    const out = []
-    let skip = false
-    for (const ln of lines) {
-      if (/^agent-default-model\s*:/.test(ln)) { skip = true; continue }
-      if (skip && /^\S/.test(ln) ) { skip = false }
-      if (!skip) out.push(ln)
+    let existing = ''
+    if (existsSync(sf)) existing = readFileSync(sf, 'utf8')
+    if (!/^agent-default-model\s*:/m.test(existing)) {
+      // 尚无默认选择：追加一段（保留文件已有其它 settings 段）
+      const block = `agent-default-model:\n  provider: ${defaultProvider}\n  model: ${defaultModel}\n`
+      writeFileSync(sf, (existing.trim() ? existing.replace(/\s*$/, '\n\n') : '') + block)
     }
-    out.push(`agent-default-model:`)
-    out.push(`  provider: ${defaultProvider}`)
-    out.push(`  model: ${defaultModel}`)
-    writeFileSync(sf, out.join('\n') + '\n')
   } catch (e) {
     console.error(`[launcher] 设置默认模型失败（不影响启动）: ${e?.message ?? e}`)
   }
