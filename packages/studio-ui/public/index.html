@@ -199,6 +199,8 @@ input,textarea,select{font-family:inherit}
 .a-card-body{padding:10px 12px;font-size:11px;color:var(--muted)}
 .a-verdict{display:flex;gap:8px;padding:0 12px 12px}
 .a-verdict .btn{flex:1;text-align:center}
+.a-card.decision{border-color:rgba(154,106,20,.6);box-shadow:0 2px 10px rgba(154,106,20,.12)}
+.a-card.decision .a-card-head{background:rgba(154,106,20,.08)}
 /* V15.2 · 会话流结构化卡片（对齐 DSH-Desktop：工具调用/结果/思考/步骤均为可折叠分段） */
 .a-fold{border:1px solid var(--hair);border-radius:10px;margin:0 2px 8px;background:rgba(255,255,255,.55);overflow:hidden}
 .a-fold-head{display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:7px 10px;font-size:11.5px;color:var(--ink);cursor:pointer;user-select:none}
@@ -1329,6 +1331,27 @@ function addStepLabel(step) {
   return el;
 }
 function addTrace(text, isErr) { /* V15.2：步骤/工具走结构化卡片，不再平铺文本行 */ }
+/* 扫描差异决策卡：Agent 呈现代理结论后，用可点击按钮承接【修复 / 忽略并提交】，无需用户打字 */
+function renderDecisionCard(filePath, hasDiff) {
+  const el = document.createElement('div');
+  el.className = 'a-card decision';
+  el.innerHTML = '<div class="a-card-head"><span class="c-title">⚠ 提交前扫描差异已确认</span></div>'
+    + '<div class="a-card-body">' + esc(filePath ? '文件 ' + filePath : '当前作业') + ' 存在差异，请选择处理方式：'
+    + (hasDiff ? ' <span style="color:var(--warn)">「修复」对齐设计后复扫，或「忽略并提交」放行。</span>' : '') + '</div>'
+    + '<div class="a-verdict">'
+    + '<button class="btn primary" id="dec-fix">修复</button>'
+    + '<button class="btn danger" id="dec-force">忽略并提交</button>'
+    + '<button class="btn" id="dec-cancel">取消</button></div>';
+  appendChat(el);
+  document.getElementById('dec-fix').addEventListener('click', () => {
+    el.remove(); send('修复 ' + filePath + ' 的扫描差异：把 SQL 字段类型对齐设计 DECIMAL(10,4)，完成后复扫确认清零，再走 repo_commit 提交', true);
+  });
+  document.getElementById('dec-force').addEventListener('click', () => {
+    el.remove(); send('忽略差异，提交工作区变更 ' + filePath + '（repo_commit force=true 显式放行）', true);
+  });
+  document.getElementById('dec-cancel').addEventListener('click', () => { el.remove(); send('先不提交', true); });
+  return el;
+}
 
 /* ---- 运行进展心跳：输入区上方固定条，不进会话流、不抢滚动 ---- */
 let busy = false;         // 本 turn 是否在进行中
@@ -1372,8 +1395,14 @@ function renderEvents(events) {
       // 其余注入（goal 轮次 / skill 目录 / 系统快照）是 Agent 内部上下文，不进会话流
     } else if (e.type === 'assistant/message') {
       const t = (d.message?.content ?? []).filter((b) => b.type === 'text').map((b) => b.text).join('');
-      if (t) addMsg('agent', t, 'Data Agent');
+      if (t) { addMsg('agent', t, 'Data Agent'); }
+      if (t && /【修复】|【忽略并提交】|请选择|修复.*忽略.*提交/.test(t)) {
+        // 命中「修复 / 忽略并提交」决策点 → 弹审核按钮（用当前锚定文件；同 turn 只弹一次）
+        const fp = active.file || (repoState.current && repoState.current);
+        if (!renderDecisionCard.done) { renderDecisionCard.done = true; renderDecisionCard(fp, true); }
+      }
     } else if (e.type === 'turn/start') {
+      renderDecisionCard.done = false;
       busy = true; turnStartAt = Date.now(); showThinking('启动');
     } else if (e.type === 'step/start') {
       showThinking(`步骤 ${d.step}`);
