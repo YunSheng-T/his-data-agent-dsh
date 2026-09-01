@@ -880,9 +880,12 @@ function viewCode(f) {
   const html = esc(f.text)
     .replace(/(--\s*@[^\n]*)/g, '<span class="an">$1</span>')
     .replace(/(--[^\n]*)/g, (c) => c.startsWith('<span') ? c : `<span class="cm">${c}</span>`);
-  $('#ws-body').innerHTML = `<div class="sec-title">代码 <span class="tlabel">${esc(f.parsed.engine ?? 'etl')} · ${ent?.dirty || ent?.uncommitted ? '未提交' : '与分支一致'}</span></div>
+  const uncommitted = ent && (ent.dirty || ent.uncommitted);
+  $('#ws-body').innerHTML = `<div class="sec-title">代码 <span class="tlabel">${esc(f.parsed.engine ?? 'etl')} · ${uncommitted ? '未提交' : '与分支一致'}</span>${uncommitted ? '<button class="btn primary" id="btn-commit">提交变更</button>' : ''}</div>
     <div class="ddl-view">${html}</div>
-    <p class="note">${ent?.dirty || ent?.uncommitted ? '工作区修改未提交——提交后才会落到分支上。' : '代码与分支一致。'}改代码可以交给右侧 Agent。</p>`;
+    <p class="note">${uncommitted ? '工作区修改未提交——提交后才会落到分支上。' : '代码与分支一致。'}改代码可以交给右侧 Agent。</p>`;
+  const bc = document.getElementById('btn-commit');
+  if (bc) bc.addEventListener('click', () => send('提交前先做本体推理扫描：对 ' + active.file + ' 走 get_anchored_object → policy_get_policies → policy_get_rules → rule_get_implementations → get_scan_plan → check_consistency，把扫描结论/一致性差异讲清楚。若存在差异，等我在会话里选择【修复】或【忽略并提交】；若扫描干净，直接 repo_commit 提交。', true));
 }
 /* 可视化 · 字段映射（V9 曲线 + 转换徽标框） */
 function viewFlow(f) {
@@ -1002,24 +1005,8 @@ async function viewScriptScan(f) {
     h += '<div class="fnd"><div class="fnd-head"><span class="fnd-sev ' + (fr.id === 'F-101' ? 'warn' : 'info') + '">' + esc(fr.severity) + '</span>' + esc(fr.id) + ' ' + esc(fr.rule || '') + ' · ' + esc(fr.target || '') + '</div><div class="fnd-desc">' + esc(fr.desc || '') + '</div><div class="fnd-chain">归因链：' + esc(fr.chain || '') + '</div></div>';
   });
   if (findings.some(function (fr) { return fr.id === 'F-101' })) h += '<p class="note">修复走右侧 Agent：确认后生成 gated diff（DOUBLE→DECIMAL(10,4)）落工作区未提交 → 复扫清零 → 提交仍走 repo_commit 门禁。</p>';
-  // 提交变更入口：扫描是 repo_commit 的 pre-hook，有差异需人工确认后才能提
-  const ent = repoState.tree.find((e) => e.path === active.file);
-  const uncommitted = ent && (ent.dirty || ent.uncommitted);
-  const verdict = d.scanVerdict || 'no-scan';
-  const canCommit = uncommitted && verdict !== 'no-scan';
-  const commitTip = verdict === 'diff' ? '⚠ 扫描有差异，提交会被阻断——需先修复或人工确认（force）才能提交' : (verdict === 'pass' || verdict === 'pass-unknown') ? '✓ 扫描干净，可提交该变更' : '该作业未扫描，无法预检';
-  if (canCommit) {
-    h += '<div class="sv-commitbar"><span class="sv-commit-tip">' + esc(commitTip) + '</span>'
-      + '<button class="btn ' + (verdict === 'diff' ? 'danger' : 'primary') + '" id="btn-commit">' + (verdict === 'diff' ? '提交变更（需确认差异）' : '提交变更') + '</button></div>';
-  } else if (!uncommitted) {
-    h += '<div class="sv-commitbar"><span class="sv-commit-tip">该文件无未提交修改，无需提交。</span></div>';
-  }
   $('#ws-body').innerHTML = h;
   if (d.chain && d.chain.ok) renderOntoChain(d.chain);
-  const bc = document.getElementById('btn-commit');
-  if (bc) bc.addEventListener('click', () => {
-    send(verdict === 'diff' ? '提交工作区变更（repo_commit）：预扫描发现差异，请先给我修复建议并等我确认后再提交' : '提交工作区变更 ' + active.file + '（repo_commit，预扫描通过）', true);
-  });
 }
 /* 本体推理链 · X6 图（V15.1 对齐 ER 图容器：分层布局 + manhattan 路由 + 边标签） */
 let ontoGraph = null;
