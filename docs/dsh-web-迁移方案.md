@@ -49,10 +49,23 @@ HIS = 领域插件（标准 Cordis，可零改动挂 dsh web）+ 自建 UI（his
 - @deepseek-ai/dsh-client-ui-conversation（conversation 基础设施）
 - @deepseek-ai/dsh-client-store（SnapshotStore）
 - @deepseek-ai/dsh-client-ui-layout（sidebar/details 面板）
-- @deepseek-ai/dsh-web（标准 web 宿主，dsh-base 已含）
+- @deepseek-ai/dsh-web-frontend（标准 web 前端 SPA，Vite 构建，dist 已在 node_modules，`dsh web` 伺服）
+- @deepseek-ai/dsh-client-ui-trajectory（官方轨迹组件，已在 node_modules）
+- @deepseek-ai/dsh-web（注意：这是 search/fetch provider 注册器，不是前端界面）
 - AntV X6（React 封装，ER 图/推理链）
 
-## 五、风险与不变量
+> 关键认知修正：标准 dsh web 前端 = `dsh-web-frontend`（独立 React SPA），由 `dsh web`（= --profile web）伺服；`dsh-base` 里挂的 `id: web` 只是 search/fetch provider，不是前端。`dsh-web-frontend` 和 `dsh-client-ui-trajectory` 都已在当前 node_modules/.pnpm，无需重新引入，只需启用。
+
+## 五、标准 web profile 组成（实测 dsh web --dump-config）
+
+`dsh web`（= --profile web）由 @deepseek-ai/dsh-base + @deepseek-ai/dsh-web-app 组成，含完整前端栈：
+- 宿主：dsh-web-app（startup/app）+ client-hmr + client-connection + client-runtime + cordis-client-runner
+- UI：ui-layout / ui-sidebar / ui-renderer / ui-settings / ui-chat / ui-trajectory / ui-conversation / ui-slots 等
+- 领域能力（HIS 要挂进去的）：agent / agent-default-model / llm-pi-ai / session / typert 等
+
+HIS 领域插件（domain-tools-*/workspace-*/approval-policy）是标准 Cordis 插件，挂进 web profile 的 cordis.patch.yml（或 --patch overlay）即可被 Agent 使用。
+
+## 六、风险与不变量
 
 - 领域工具契约不变（ontology.*/scan.*/repo.* 调用契约不动）。
 - gated 写操作确认（aVerdict）语义不变，只改呈现。
