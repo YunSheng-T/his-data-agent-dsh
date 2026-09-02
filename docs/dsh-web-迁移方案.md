@@ -65,7 +65,72 @@ HIS = 领域插件（标准 Cordis，可零改动挂 dsh web）+ 自建 UI（his
 
 HIS 领域插件（domain-tools-*/workspace-*/approval-policy）是标准 Cordis 插件，挂进 web profile 的 cordis.patch.yml（或 --patch overlay）即可被 Agent 使用。
 
-## 六、风险与不变量
+## 六、dsh client slot 插件开发范式（阶段3-5 依据，已研究）
+
+一个 dsh client UI 插件的标准结构（以 ui-sidebar 为范本）：
+
+```ts
+// packages/ui-his-xxx/src/index.ts（host 入口，可为空）
+export function apply(): void {}
+
+// packages/ui-his-xxx/src/client/index.ts（浏览器端，注册 slot）
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/dsh-client-ui-slots'
+export const inject = ['slots', ...]
+export function apply(ctx: ClientContext): void {
+  ctx.slots.register({
+    name: 'his-repo',
+    children: { 'sidebar.xxx': { kind: 'single', scope: 'root' } },  // 槽定义
+    inject: () => ({ ...props }),                                     // 注入数据
+  }, HisRepoComponent)                                                 // React 组件
+}
+```
+
+关键依赖（client 插件需引入）：
+- @deepseek-ai/dsh-client-ui-slots（SlotRegistry / ctx.slots）
+- @deepseek-ai/dsh-client-ui-renderer
+- @deepseek-ai/dsh-client-ui-session
+- @deepseek-ai/dsh-client-store（SnapshotStore）
+- @deepseek-ai/dsh-client-ui-layout（sidebar/details 面板）
+
+已有 sidebar 子槽：sidebar.brand.mark / sidebar.brand.name / sidebar.workspaces / sidebar.settings / sidebar.footer.action。HIS 的模型目录/代码仓树需挂到 sidebar 的自定义槽（用 ctx.slots.register 的 children 声明新槽，或复用 sidebar 现有子槽）。
+
+构建：每个 client 插件是独立 npm 包（package.json + tsdown.config.ts + src/client + src/index），通过 profile 的 bundle/patch 注册。
+
+## 七、阶段3 代码仓树组件（ui-his-repo）精确落地清单
+
+目标：把 HIS 代码仓树（branches + treeWithState + 新建 SQL）做成 React slot 插件挂 sidebar。
+
+### 组件包结构（packages/ui-his-repo/）
+```
+packages/ui-his-repo/
+├── package.json          # dsh.client 声明 + exports[./client] + tsdown
+├── tsconfig.json
+├── tsdown.config.ts
+├── src/index.ts          # host 端 apply()（空）
+└── src/client/
+    ├── index.ts          # ctx.slots.register('his-repo', ...) 挂 sidebar 子槽
+    ├── RepoPanel.tsx     # 代码仓树 React 组件（branches 下拉 + treeWithState 列表 + 新建 SQL）
+    └── ...
+```
+
+### 数据流（关键）
+- host 端：新增 `dsh-api-his-repo-controller`（把 hisRepo.branches()/treeWithState()/status() 暴露成 RPC）。
+- client 端：经 @deepseek-ai/dsh-api-remotes + controller 拿树数据，React 组件订阅渲染。
+
+### 挂载 slot
+- 复用 sidebar 现有子槽或声明新槽（ctx.slots.register 的 children）。
+
+### 依赖（peerDependencies）
+- @deepseek-ai/dsh-client-ui-slots / ui-renderer / ui-session / ui-sidebar / client-connection / client-store
+- @deepseek-ai/dsh-api-remotes + 自建 his-repo-controller
+- react ^18、@deepseek-ai/cordis
+
+### 构建
+- 每个 client 插件独立 npm 包，tsdown 构建出 lib/index.js + lib/client.js。
+- 注册进 his-web profile 的 bundle/patch（client 插件经 dsh.client 声明自动发现）。
+
+## 八、风险与不变量
 
 - 领域工具契约不变（ontology.*/scan.*/repo.* 调用契约不动）。
 - gated 写操作确认（aVerdict）语义不变，只改呈现。
