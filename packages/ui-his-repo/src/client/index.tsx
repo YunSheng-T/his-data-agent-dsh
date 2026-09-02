@@ -83,6 +83,9 @@ function HisRepoPanel(): JSX.Element {
   )
 }
 
+/** 依赖注入声明：apply 访问 ctx.slots 必须先 inject（cordis ctx 是代理，未声明即抛 without inject）。 */
+export const inject = ['slots']
+
 /** 注册会话视图 tab「代码仓」（conversation.view list 槽；chat=0 / trajectory=10 之后）。 */
 export function apply(ctx: ClientContext): void {
   ctx.slots.inject('conversation.view', () => ctx.slots.register({
