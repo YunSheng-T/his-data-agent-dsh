@@ -337,6 +337,16 @@ body.agent-float .a-pop{color:var(--ink);border-color:var(--hair);background:rgb
 .a-turn-group .tg-head{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:9.5px;color:var(--muted);letter-spacing:.05em;margin-bottom:6px}
 .a-turn-group .tg-tools{display:flex;flex-direction:column;gap:2px}
 .a-turn-group .a-fold{margin:2px 0}
+/* 可观测性 · 执行轨迹：每个 step 一个轨迹块，块头列工具，重复调用显式标注 */
+.a-step-trace{margin:4px 0 12px;border:1px solid var(--hair);border-radius:10px;overflow:hidden;background:rgba(255,255,255,.4)}
+.a-step-trace .st-head{display:flex;align-items:center;gap:8px;padding:7px 11px;font-family:var(--mono);font-size:10px;color:var(--muted);border-bottom:1px solid var(--hair-soft);cursor:pointer;user-select:none}
+.a-step-trace .st-head .f-chev{margin-left:auto;font-size:9px;color:var(--faint);transition:transform .2s}
+.a-step-trace[open] .st-head .f-chev{transform:rotate(90deg)}
+.a-step-trace .st-body{padding:2px 0}
+.a-step-trace .st-tool{display:flex;align-items:center;gap:7px;padding:3px 11px;font-size:10.5px;font-family:var(--mono);color:var(--ink)}
+.a-step-trace .st-tool .f-dot{width:6px;height:6px;border-radius:50%;flex:none}
+.a-step-trace .st-tool.dup .f-name{color:var(--warn)}
+.a-step-trace .st-dup-badge{font-size:8.5px;color:var(--warn);border:1px solid rgba(154,106,20,.4);border-radius:99px;padding:0 6px;flex:none}
 .a-meta{display:flex;gap:10px;margin-top:7px;font-family:var(--mono);font-size:9px;color:var(--faint);letter-spacing:.06em}
 .led{width:5px;height:5px;border-radius:50%;background:var(--ok);display:inline-block;margin-right:4px}
 
@@ -1386,6 +1396,8 @@ function termBlock(lines) {
 const foldState = { tools: new Map(), think: null };
 let turnGroup = null;   // 当前 assistant 回合容器（可观测性·回合分组）
 let turnGroupToolBox = null; // 回合容器内的工具调用子列表
+// 可观测性·执行轨迹：每个 step 一个轨迹块，记录「工具签名 → step」用于跨 step 重复调用标注
+const traceState = { curStep: null, curBlock: null, calledTools: new Map() };
 function foldCard(kind, name, sub, opts = {}) {
   const el = document.createElement('div');
   el.className = 'a-fold' + (kind === 'think' ? ' a-think' : '');
@@ -1444,6 +1456,43 @@ function addStepLabel(step) {
   el.textContent = '步骤 ' + step;
   appendChat(el);
   return el;
+}
+/* 可观测性·执行轨迹：每个 step 一个轨迹块，块头列工具名，跨 step 重复调用显式标注 */
+function beginStepTrace(step) {
+  const el = document.createElement('div');
+  el.className = 'a-step-trace';
+  el.innerHTML = '<div class="st-head"><span class="f-dot run"></span><span class="st-title">步骤 ' + step + '</span><span class="st-toolcount"></span><span class="f-chev">▸</span></div><div class="st-body"></div>';
+  el.querySelector('.st-head').addEventListener('click', () => {
+    const b = el.querySelector('.st-body');
+    const open = b.style.display !== 'none';
+    b.style.display = open ? 'none' : 'block';
+    el.toggleAttribute('open', !open);
+  });
+  appendChat(el);
+  traceState.curStep = step;
+  traceState.curBlock = el;
+  return el;
+}
+/* 轨迹块内加一条工具调用行；签名已在更早 step 出现则标「重复调用」 */
+function traceToolLine(name, argsTxt, callId) {
+  if (!traceState.curBlock) return;
+  const sig = name + '|' + argsTxt;
+  const prev = traceState.calledTools.get(sig);
+  const isDup = prev !== undefined && prev !== traceState.curStep;
+  if (!isDup) traceState.calledTools.set(sig, traceState.curStep);
+  const row = document.createElement('div');
+  row.className = 'st-tool' + (isDup ? ' dup' : '');
+  row.innerHTML = '<span class="f-dot ' + (isDup ? 'err' : 'ok') + '"></span>'
+    + '<span class="f-name">' + esc(name) + '</span>'
+    + (argsTxt ? '<span class="f-sub" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9.5px;color:var(--faint)">' + esc(argsTxt) + '</span>' : '')
+    + (isDup ? '<span class="st-dup-badge">重复 · 步骤' + prev + '</span>' : '');
+  const body = traceState.curBlock.querySelector('.st-body');
+  body.appendChild(row);
+  const tc = traceState.curBlock.querySelector('.st-toolcount');
+  if (tc) {
+    const n = traceState.curBlock.querySelectorAll('.st-tool').length;
+    tc.textContent = '· ' + n + ' 工具';
+  }
 }
 function addTrace(text, isErr) { /* V15.2：步骤/工具走结构化卡片，不再平铺文本行 */ }
 /* 扫描差异决策卡：Agent 呈现代理结论后，用可点击按钮承接【修复 / 忽略并提交】，无需用户打字 */
@@ -1566,9 +1615,10 @@ function renderEvents(events) {
     } else if (e.type === 'turn/start') {
       renderDecisionCard.done = false;
       busy = true; turnStartAt = Date.now(); showThinking('启动');
+      traceState.calledTools = new Map(); traceState.curStep = null; traceState.curBlock = null;
     } else if (e.type === 'step/start') {
       showThinking(`步骤 ${d.step}`);
-      addStepLabel(d.step);
+      beginStepTrace(d.step);
       foldState.tools = new Map(); foldState.think = null;
       turnGroup = null; turnGroupToolBox = null;
     } else if (e.type === 'reasoning-chunks') {
@@ -1595,6 +1645,7 @@ function renderEvents(events) {
       card.dataset.callId = d.callId;
       foldBodySet(card, '<div class="f-summary">调用中…</div>');
       foldState.tools.set(d.callId, card);
+      traceToolLine(d.name, argTxt, d.callId);
     } else if (e.type === 'tool/code-dispatch') {
       showThinking(`工具 ${d.name}`);
       const isOnto = ONTO_TOOLS.has(d.name);
@@ -1605,6 +1656,7 @@ function renderEvents(events) {
       card.dataset.callId = d.callId;
       foldBodySet(card, d.isError ? '<div class="f-err">' + esc(d.message || '执行失败') + '</div>' : '<div class="f-summary">已执行</div>');
       foldState.tools.set(d.callId, card);
+      traceToolLine(d.name, typeof d.arguments === 'string' ? d.arguments : JSON.stringify(d.arguments ?? {}), d.callId);
     } else if (e.type === 'tool/result') {
       showThinking('工具返回');
       for (const b of d.message?.content ?? []) {
