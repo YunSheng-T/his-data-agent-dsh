@@ -114,9 +114,22 @@ packages/ui-his-repo/
     └── ...
 ```
 
-### 数据流（关键）
-- host 端：新增 `dsh-api-his-repo-controller`（把 hisRepo.branches()/treeWithState()/status() 暴露成 RPC）。
-- client 端：经 @deepseek-ai/dsh-api-remotes + controller 拿树数据，React 组件订阅渲染。
+### 数据流（关键，已研究 Typert RPC 范式）
+host 端经 Typert RPC 暴露服务（以 workspace-controller 为范本）：
+
+```ts
+import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
+export class HisRepoController extends TypertRemoteService {
+  static inject = ['typert', 'hisRepo']   // hisRepo 是 workspace-repo 注册的服务
+  constructor(ctx) { super(ctx, 'hisRepoController', { namespace: 'hisRepo' }) }
+  @Remote('branches')  branches(req) { return ctx.hisRepo.branches() }
+  @Remote('tree')      tree(req)      { return ctx.hisRepo.treeWithState(req.branch) }
+}
+```
+
+client 端经 `ctx.remote.hisRepo` 调用，React 组件订阅。
+
+关键依赖：@deepseek-ai/dsh-typert-protocol（Remote/TypertRemoteService 装饰器）+ @deepseek-ai/dsh-api-remotes（client 端 remote 命名空间）。
 
 ### 挂载 slot
 - 复用 sidebar 现有子槽或声明新槽（ctx.slots.register 的 children）。
