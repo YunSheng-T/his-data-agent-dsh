@@ -1,0 +1,21 @@
+{
+  "name": "dsh-profile-his-web",
+  "private": true,
+  "dependencies": {
+    "@his/domain-tools-modeling": "link:../../../packages/domain-tools-modeling",
+    "@his/approval-policy": "link:../../../packages/approval-policy",
+    "@his/workspace-anchor": "link:../../../packages/workspace-anchor",
+    "@his/workspace-repo": "link:../../../packages/workspace-repo",
+    "@his/domain-tools-dev": "link:../../../packages/domain-tools-dev",
+    "@his/domain-tools-ops": "link:../../../packages/domain-tools-ops",
+    "@his/domain-tools-ontology": "link:../../../packages/domain-tools-ontology"
+  },
+  "dsh": {
+    "profile": {
+      "bundles": [
+        "@deepseek-ai/dsh-base",
+        "@deepseek-ai/dsh-web-app"
+      ]
+    }
+  }
+}
