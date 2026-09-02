@@ -1,0 +1,64 @@
+{
+  "name": "@his/ui-his-repo",
+  "description": "HIS 代码仓树：React slot 组件挂 dsh web sidebar（branches + treeWithState + 新建 SQL）",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "types": "./lib/types/client/index.d.ts",
+      "default": "./lib/client.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-api-remotes",
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-client-ui-session",
+        "@deepseek-ai/dsh-client-ui-sidebar",
+        "@deepseek-ai/dsh-client-ui-slots"
+      ],
+      "platform": "web"
+    }
+  },
+  "scripts": {
+    "build": "tsdown",
+    "watch": "tsdown --watch"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "0.1.1-rc.2",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-typert-protocol": "0.1.1-rc.2"
+  },
+  "devDependencies": {
+    "@deepseek-ai/dsh-api-remotes": "0.1.1-rc.2",
+    "@deepseek-ai/dsh-client-connection": "0.1.1-rc.2",
+    "@deepseek-ai/dsh-client-locale": "0.1.1-rc.2",
+    "@deepseek-ai/dsh-client-ui-renderer": "0.1.1-rc.2",
+    "@deepseek-ai/dsh-client-ui-session": "0.1.1-rc.2",
+    "@deepseek-ai/dsh-client-ui-sidebar": "0.1.1-rc.2",
+    "@deepseek-ai/dsh-client-ui-slots": "0.1.1-rc.2",
+    "@types/react": "~18.3.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "tsdown": "^0.7.0",
+    "typescript": "^5.6.0"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/client.js",
+    "lib/types"
+  ]
+}
