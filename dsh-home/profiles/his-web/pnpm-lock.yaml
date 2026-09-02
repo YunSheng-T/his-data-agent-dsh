@@ -23,6 +23,9 @@ importers:
       '@his/domain-tools-ops':
         specifier: link:../../../packages/domain-tools-ops
         version: link:../../../packages/domain-tools-ops
+      '@his/ui-his-repo':
+        specifier: link:../../../packages/ui-his-repo
+        version: link:../../../packages/ui-his-repo
       '@his/workspace-anchor':
         specifier: link:../../../packages/workspace-anchor
         version: link:../../../packages/workspace-anchor

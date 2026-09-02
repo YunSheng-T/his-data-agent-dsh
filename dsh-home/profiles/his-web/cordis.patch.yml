@@ -84,3 +84,5 @@
       name: '@his/domain-tools-dev'
     - id: his-domain-tools-ops
       name: '@his/domain-tools-ops'
+    - id: ui-his-repo
+      name: '@his/ui-his-repo'

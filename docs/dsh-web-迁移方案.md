@@ -143,6 +143,45 @@ client 端经 `ctx.remote.hisRepo` 调用，React 组件订阅。
 - 每个 client 插件独立 npm 包，tsdown 构建出 lib/index.js + lib/client.js。
 - 注册进 his-web profile 的 bundle/patch（client 插件经 dsh.client 声明自动发现）。
 
+## 七·实测修正（阶段3 落地后校准，先于阶段4 组件的范式）
+
+> 按真实 dsh 0.1.1-rc.2 slot 拓扑与构建链校准早期设计假设。阶段 4-5 各组件沿用本范式，不再逐包研究。
+
+### 1) host 数据面：webServer JSON 路由，不用 Typert codegen
+- dsh 的 Typert client 通道（ctx.remote）是 **codegen 生态**：host 贡献 + client contribution（`@deepseek-ai/dsh-typert-generator` 产 `typert.remote-client.d.ts/js`），client 侧还要被 dsh-api-remotes 装配。独立业务包手写这链条不划算。
+- **实测可用路径**：host 进程自带 `dsh-host-webserver`（7400），提供 `ctx.webServer.register({kind:'exact'|'prefix', path, handler})`（node:http 原生 req/res）。host 插件注入 `['webServer','hisRepo']`，apply 里注册 `/his-repo/branches`、`/his-repo/current-branch`、`/his-repo/tree?branch=x` JSON 端点；client 同源 fetch。已实测：branch/tree 数据正确返回。
+- 命名避开 dsh 已占前缀（勿用 /api/ 开头的 duplicate）；本项目用 `/his-repo/*`。
+- 类型合并：`import type {} from '@deepseek-ai/dsh-host-webserver'` 引入 ctx.webServer；handler 参数 `IncomingMessage/ServerResponse`（devDep `@types/node`）。
+
+### 2) 挂载位：conversation.view 会话视图 tab（sidebar 无第三方 big-panel 位）
+- `sidebar` 是 single/root，被 ui-sidebar 独占（再注册 = 整体替换导航列，且其声明的子槽随之消失）。sidebar 内可叠加的只有 `sidebar.footer.action`（list，脚部小动作行）。
+- **官方扩展面板先例 = ui-trajectory**：注册进 `conversation.view`（list/session）会话视图 tab 环（chat=order 0，trajectory=order 10）。业务面板照此 `order: 20` 起排。
+- 注册写法（client apply 内）：
+  ```ts
+  ctx.slots.inject('conversation.view', () => ctx.slots.register({
+    name: 'conversation.view', id: 'his-repo', order: 20, label: '代码仓',
+  }, () => HisRepoPanel()))
+  ```
+- `ctx.slots.inject(key, cb)` = 声明生命周期注入：cb 在槽声明后同步执行（ui-conversation 声明 conversation.view），卸载时逆序释放。
+
+### 3) 构建：host 由 tsc 发射（装饰器降级），tsdown 只产 client 闭包
+- tsdown 输出**保留标准装饰器原文**（Node 22 原生 ESM 不认 → loader 报 `Invalid or unexpected token`）。官方包（dsh-commands 等）是 tsc 发射：标准装饰器自动降级为 `__esDecorate` 助手。
+- **ui-his-repo 构建链**（build script）：
+  `rm -rf lib && tsc -p tsconfig.build.json && tsc -p tsconfig.host.json && tsdown --config-loader tsx`
+  - tsconfig.build.json：emitDeclarationOnly → lib/*.d.ts（含 src/client 类型）
+  - tsconfig.host.json：include 仅 src/index.ts，发 JS → lib/index.js（main/exports 指向它，非 .mjs）
+  - tsdown.config.ts：仅 clientBundle（CJS module-loader 闭包 → lib/client.js）
+- package.json 需导出 `name` + `inject` + `apply`（与 his 域插件一致；loader entry 按 name 识别）。
+- **client 插件被发现 = 成为 host Loader entry**：cordis.patch.yml insert 加 `- id: ui-his-repo name: '@his/ui-his-repo'` + profile package.json 依赖 link。`dsh-client-modules` 扫描 entry 的 dsh.client 声明 → 伺服 `/plugins/<id>/client.js` → 写进 boot manifest（实测 manifest 含该行）。
+- pnpm：node_modules 由 pnpm 11 装（store v11），须用 `~/Library/Application Support/DSH Desktop/runtime-commands/bin/pnpm`（v11.8.0），brew pnpm(10) 会因 store 版本拒绝。profile 内 install 用 `CI=true pnpm install --no-frozen-lockfile`。
+- lib/ 构建产物入库（profile 是 link: 依赖，运行时直接读 lib）。
+
+### 4) 验证
+- `curl http://127.0.0.1:7400/` → boot manifest（window.__DSH_BOOT__）含 `"id":"@his/ui-his-repo"` + url `/plugins/@his/ui-his-repo/client.js?rev=...`。
+- `curl http://127.0.0.1:7400/his-repo/branches` / `/his-repo/tree?branch=main` → 真实数据。
+- UI 出现：会话顶部视图环出现「代码仓」tab（chat/trajectory 之后），点开见分支下拉 + 文件树（未提交/已修改标注）。
+
+
 ## 八、风险与不变量
 
 - 领域工具契约不变（ontology.*/scan.*/repo.* 调用契约不动）。

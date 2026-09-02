@@ -8,7 +8,8 @@
     "@his/workspace-repo": "link:../../../packages/workspace-repo",
     "@his/domain-tools-dev": "link:../../../packages/domain-tools-dev",
     "@his/domain-tools-ops": "link:../../../packages/domain-tools-ops",
-    "@his/domain-tools-ontology": "link:../../../packages/domain-tools-ontology"
+    "@his/domain-tools-ontology": "link:../../../packages/domain-tools-ontology",
+    "@his/ui-his-repo": "link:../../../packages/ui-his-repo"
   },
   "dsh": {
     "profile": {
