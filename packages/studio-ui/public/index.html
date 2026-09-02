@@ -1238,48 +1238,26 @@ async function viewJobLineage(f) {
 /* 调度 · 依赖 DAG 图（横向） */
 async function viewDagGraph(f) {
   const p = f.parsed;
-  const alertCh = f.text.match(/channel:\s*(.+)/)?.[1]?.trim() ?? '—';
-  const self = active.file;                       // 当前 .dag 路径
-  const selfName = self.split('/').pop();
   let L = null;
   try { L = await api('/api/repo/lineage?path=' + encodeURIComponent(p.ref)); } catch {}
-  // 收集依赖链：上游（depends，递归取多级）+ 下游（dagDependents，递归取多级）
-  const upAll = new Set(); const downAll = new Set();
-  const stackUp = [...(p.depends ?? [])];
-  while (stackUp.length) { const d = stackUp.pop(); if (upAll.has(d)) continue; upAll.add(d);
-    try { const r = await api('/api/repo/file?path=' + encodeURIComponent(d)); if (r.parsed?.depends) stackUp.push(...r.parsed.depends); } catch {} }
-  const stackDown = [...(L?.downstream?.dagDependents ?? [])];
-  while (stackDown.length) { const d = stackDown.pop(); if (downAll.has(d)) continue; downAll.add(d);
-    try { const r = await api('/api/repo/file?path=' + encodeURIComponent(d)); if (r.parsed) { const rr = await api('/api/repo/lineage?path=' + encodeURIComponent(r.parsed.ref)); stackDown.push(...(rr?.downstream?.dagDependents ?? [])); } } catch {} }
-  const nodes = [];
-  // 上游按深度从远到近排（越靠左越上游）
-  [...upAll].forEach((d) => nodes.push({ id: d, name: d.split('/').pop().replace(/\.dag$/, ''), kind: 'up' }));
-  nodes.push({ id: self, name: selfName.replace(/\.dag$/, ''), kind: 'self' });
-  [...downAll].forEach((d) => nodes.push({ id: d, name: d.split('/').pop().replace(/\.dag$/, ''), kind: 'down' }));
-  const edges = [];
-  [...upAll].forEach((d) => edges.push({ from: d, to: self }));
-  [...downAll].forEach((d) => edges.push({ from: self, to: d }));
-  // 分层 x：上游 0/1/2…（越远越小），self 固定中间，下游递增
-  const maxUp = upAll.size, colGap = 210, rowGap = 90;
-  const xOf = (kind, idx) => kind === 'up' ? 40 + (maxUp - 1 - idx) * colGap : kind === 'self' ? 40 + maxUp * colGap : 40 + (maxUp + 1 + idx) * colGap;
-  let ui = 0, di = 0;
-  const positions = {};
-  nodes.forEach((n) => { if (n.kind === 'up') positions[n.id] = { x: xOf('up', ui), y: 50 + (ui % 3) * rowGap }; ui++; else if (n.kind === 'self') positions[n.id] = { x: xOf('self', 0), y: 50 + rowGap }; else positions[n.id] = { x: xOf('down', di), y: 50 + (di % 3) * rowGap }; di++; });
-  const nodeHtml = nodes.map((n) => {
-    const pos = positions[n.id]; const main = n.kind === 'self';
-    return `<rect x="${pos.x}" y="${pos.y}" width="180" height="56" rx="8" style="fill:${main ? '#0b0b0b' : '#fafaf9'};stroke:${main ? '#0b0b0b' : 'rgba(11,11,11,.35)'};stroke-width:${main ? 0 : 1}"/>
-      <text x="${pos.x + 90}" y="${pos.y + 24}" text-anchor="middle" style="font:11px monospace;fill:${main ? '#fff' : 'var(--ink)}">${esc(n.name)}</text>
-      <text x="${pos.x + 90}" y="${pos.y + 43}" text-anchor="middle" style="font:9px monospace;fill:${main ? 'rgba(255,255,255,.7)' : 'var(--muted)'}">${n.kind === 'up' ? '上游' : n.kind === 'down' ? '下游' : esc(p.cron ?? '触发')}</text>`;
-  }).join('');
-  const edgeHtml = edges.map((e) => {
-    const a = positions[e.from], b = positions[e.to];
-    return `<line x1="${a.x + 180}" y1="${a.y + 28}" x2="${b.x}" y2="${b.y + 28}" style="stroke:rgba(11,11,11,.4);stroke-width:1.2"/>
-      <path d="M${b.x} ${b.y + 28} l-7 -3.4 v6.8 z" style="fill:rgba(11,11,11,.4)"/>`;
-  }).join('');
-  const w = Math.max(700, 40 + (maxUp + upAll.size + downAll.size + 1) * colGap);
+  const alertCh = f.text.match(/channel:\s*(.+)/)?.[1]?.trim() ?? '—';
+  const upName = (p.depends ?? [])[0]?.split('/').pop() ?? null;
+  const downName = L?.downstream?.dagDependents?.[0]?.split('/').pop() ?? null;
+  const node = (x, name, time, main) => `
+    <rect x="${x}" y="40" width="170" height="58" rx="7" style="fill:#fafaf9;stroke:${main ? '#0b0b0b' : 'rgba(11,11,11,.35)'};stroke-width:${main ? 1.4 : 1}"/>
+    <text x="${x + 85}" y="63" text-anchor="middle" style="font:10px monospace;fill:var(--ink)">${esc(name)}</text>
+    <text x="${x + 85}" y="82" text-anchor="middle" style="font:9px monospace;fill:var(--warn)">${esc(time)}</text>`;
+  const edge = (x1, x2, label) => `
+    <line x1="${x1}" y1="69" x2="${x2}" y2="69" style="stroke:rgba(11,11,11,.45);stroke-width:1"/>
+    <path d="M${x2} 69 l-7 -3.4 v6.8 z" style="fill:rgba(11,11,11,.45)"/>
+    <text x="${(x1 + x2) / 2}" y="60" text-anchor="middle" style="font:8.5px monospace;fill:var(--muted)">${esc(label)}</text>`;
   $('#ws-body').innerHTML = `<div class="sec-title">可视化 · 依赖 DAG <span class="tlabel">${esc(p.cron ?? '无 cron')}</span></div>
-    <div class="er-box"><svg viewBox="0 0 ${w} 260" style="width:100%;display:block;min-height:220px">
-      ${edgeHtml}${nodeHtml}
+    <div class="er-box"><svg viewBox="0 0 660 140" style="width:100%;display:block">
+      ${upName ? node(20, upName, '上游调度', false) : '<text x="105" y="73" text-anchor="middle" style="font:10px monospace;fill:var(--faint)">数据源 · 链路入口</text>'}
+      ${edge(190, 242, '依赖')}
+      ${node(242, active.file.split('/').pop(), (p.cron ?? '') + ' 触发', true)}
+      ${edge(412, 464, '触发')}
+      ${downName ? node(464, downName, '下游调度', false) : '<text x="549" y="73" text-anchor="middle" style="font:10px monospace;fill:var(--faint)">（无下游）</text>'}
     </svg></div>
     <div class="pub-grid">
       <div class="pub-card"><h4>运行策略</h4>
@@ -1290,7 +1268,7 @@ async function viewDagGraph(f) {
         <div class="ver-row"><span class="v-no">告警</span>${esc(alertCh)}</div>
       </div>
       <div class="pub-card"><h4>说明</h4>
-        <p class="note" style="margin-top:0">调度作业是独立文件（.dag），通过 ref 指向 ETL 作业（.etl）。深色节点为当前作业，左侧为上游依赖、右侧为下游触发。改 ETL 不动调度；改调度不动 ETL。</p>
+        <p class="note" style="margin-top:0">调度作业是独立文件（.dag），通过 ref 指向 ETL 作业（.etl）。改 ETL 不动调度；改调度不动 ETL。两者分开提交、分开审计。</p>
       </div></div>`;
 }
 function viewDagYaml(f) {
