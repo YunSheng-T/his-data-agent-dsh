@@ -189,6 +189,15 @@ input,textarea,select{font-family:inherit}
 .tj-row .tj-res{flex:2;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--faint)}
 .tj-row .tj-dur{flex:none;font-size:9px;color:var(--faint);min-width:44px;text-align:right}
 .tj-row .tj-dup{border-color:rgba(154,106,20,.4);color:var(--warn)}
+.tj-row{cursor:default}
+.tj-row[data-full]{cursor:pointer}
+.tj-row[data-full]:hover{background:var(--paper-deep)}
+.tj-row .tj-chev{margin-left:auto;font-size:9px;color:var(--faint);transition:transform .2s}
+.tj-row.open .tj-chev{transform:rotate(90deg)}
+.tj-row-full{padding:4px 10px 8px;border-top:1px dashed var(--hair-soft);background:rgba(255,255,255,.45)}
+.tj-row-full .tjd{margin:4px 0}
+.tj-row-full .tjd-k{display:inline-block;font-size:8.5px;color:var(--faint);border:1px solid var(--hair);border-radius:99px;padding:0 6px;margin-bottom:3px}
+.tj-row-full .tjd pre{margin:0;font-family:var(--mono);font-size:9.5px;white-space:pre-wrap;word-break:break-all;color:var(--ink);max-height:180px;overflow:auto}
 .a-msg{margin:0 2px 14px}
 .a-who{display:flex;align-items:center;gap:7px;margin-bottom:5px}
 .a-ava{width:16px;height:16px;border-radius:5px;flex:none}
@@ -1431,9 +1440,9 @@ function renderTrajectory() {
   // 按 turn 分组的行
   const groups = []; let cur = null;
   const pushTurn = () => { if (cur) groups.push(cur); cur = null };
-  const row = (role, name, args, res, dur, dupOf) => {
+  const row = (role, name, args, res, dur, dupOf, full) => {
     if (!cur) return;
-    cur.rows.push({ role, name, args, res, dur, dupOf });
+    cur.rows.push({ role, name, args, res, dur, dupOf, full: full || {} });
   };
   for (const e of evs) {
     const d = e.data ?? {};
@@ -1443,7 +1452,15 @@ function renderTrajectory() {
     else if (e.type === 'user/message') {
       const msg = d.message ?? d, src = msg.source;
       const t = (msg.content ?? []).map((b) => b.text ?? '').join('').trim();
-      if (src && src.kind === 'user' && t) row('你', '', t.slice(0,60), '', '', null);
+      if (src && src.kind === 'user' && t) row('你', '', t.slice(0,60), '', '', null, { fullText: t });
+    }
+    // LLM 返回：reasoning（思考）+ text（正文）都要进轨迹
+    else if (e.type === 'assistant/message') {
+      const blocks = d.message?.content ?? [];
+      let think = ''; let text = '';
+      for (const b of blocks) { if (b.type === 'text') text += b.text; else if (b.type === 'reasoning') think += b.text; }
+      if (think) row('思考', '', think.slice(0,70), '', '', null, { fullText: think });
+      if (text) row('LLM', '', text.slice(0,70), '', '', null, { fullText: text });
     }
     else if (e.type === 'tool/call') {
       const sig = (d.name||'') + '|' + (d.arguments||'').slice(0,100);
@@ -1451,7 +1468,7 @@ function renderTrajectory() {
       const dupOf = prev !== undefined && prev !== stepSeq ? prev : null;
       if (dupOf === null) called.set(sig, stepSeq);
       tools++; toolStart.set(d.callId, e.time);
-      row('工具', d.name, (d.arguments||'').slice(0,70), '', '', dupOf);
+      row('工具', d.name, (d.arguments||'').slice(0,70), '', '', dupOf, { fullArgs: d.arguments || '' });
     }
     else if (e.type === 'tool/result') {
       const callId = d.message?.source?.callId || d.callId;
@@ -1460,7 +1477,7 @@ function renderTrajectory() {
       txt = txt.replace(/\s+/g,' ').slice(0,70);
       let dur = ''; const st = toolStart.get(callId); if (st !== undefined) { toolMs += (e.time - st); dur = ((e.time - st)/1000).toFixed(2) + 's'; toolStart.delete(callId); }
       // 把结果挂到最近的工具行
-      if (cur && cur.rows.length) { const r2 = cur.rows[cur.rows.length-1]; if (r2.role === '工具') { r2.res = txt; r2.dur = dur; } }
+      if (cur && cur.rows.length) { const r2 = cur.rows[cur.rows.length-1]; if (r2.role === '工具') { r2.res = txt; r2.dur = dur; r2.full.fullRes = d.message?.content?.map((b) => (b.content || []).map((c) => c.text ?? '').join('')).join('') || txt; } }
     }
   }
   pushTurn();
@@ -1469,11 +1486,24 @@ function renderTrajectory() {
   for (const g of groups) {
     html += `<div class="tj-turn"><div class="tj-turn-head">第 ${g.turn} 轮 · ${g.rows.length} 条</div>`;
     for (const r3 of g.rows) {
-      html += `<div class="tj-row"><span class="tj-role">${esc(r3.role)}</span>${r3.name ? `<span class="tj-name">${esc(r3.name)}</span>` : ''}${r3.args ? `<span class="tj-args">${esc(r3.args)}</span>` : ''}${r3.res ? `<span class="tj-res">${esc(r3.res)}</span>` : ''}${r3.dur ? `<span class="tj-dur">${esc(r3.dur)}</span>` : ''}${r3.dupOf ? `<span class="tj-dup">重复·步骤${r3.dupOf}</span>` : ''}</div>`;
+      // 行头摘要 + 可展开完整内容（工具完整参数/结果、LLM 完整正文/思考）
+      const hasFull = r3.full && (r3.full.fullArgs || r3.full.fullRes || r3.full.fullText);
+      const fullBody = hasFull ? (r3.full.fullArgs ? '<div class="tjd"><span class="tjd-k">参数</span><pre>' + esc(r3.full.fullArgs) + '</pre></div>' : '') + (r3.full.fullRes ? '<div class="tjd"><span class="tjd-k">结果</span><pre>' + esc(r3.full.fullRes) + '</pre></div>' : '') + (r3.full.fullText ? '<div class="tjd"><span class="tjd-k">全文</span><pre>' + esc(r3.full.fullText) + '</pre></div>' : '') : '';
+      html += `<div class="tj-row" ${hasFull ? 'data-full="1"' : ''}>`
+        + `<span class="tj-role">${esc(r3.role)}</span>${r3.name ? `<span class="tj-name">${esc(r3.name)}</span>` : ''}${r3.args ? `<span class="tj-args">${esc(r3.args)}</span>` : ''}${r3.res ? `<span class="tj-res">${esc(r3.res)}</span>` : ''}${r3.dur ? `<span class="tj-dur">${esc(r3.dur)}</span>` : ''}${r3.dupOf ? `<span class="tj-dup">重复·步骤${r3.dupOf}</span>` : ''}${hasFull ? '<span class="tj-chev">▸</span>' : ''}</div>`
+        + (hasFull ? `<div class="tj-row-full" style="display:none">${fullBody}</div>` : '');
     }
     html += '</div>';
   }
   box.innerHTML = html;
+  // 行点击展开完整内容
+  box.querySelectorAll('.tj-row[data-full]').forEach((r4) => r4.addEventListener('click', () => {
+    const full = r4.nextElementSibling;
+    if (!full) return;
+    const open = full.style.display !== 'none';
+    full.style.display = open ? 'none' : 'block';
+    r4.classList.toggle('open', !open);
+  }));
 }
 function foldCard(kind, name, sub, opts = {}) {
   const el = document.createElement('div');
