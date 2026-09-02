@@ -42,7 +42,7 @@ if (!env.INTERNAL_LLM_API_KEY && !env.DEEPSEEK_API_KEY) process.exit(1)
 // 选择时，按所设 key 写一次默认（运行时文件，不入库，可被用户会话区下拉覆盖）。
 // 已存在则绝不覆盖——尊重用户手动选择的 provider/model（各用各的 provider 场景下不应被启动重置）。
 // 设了 INTERNAL_LLM_API_KEY → 默认 internal-openai；只设 DEEPSEEK_API_KEY → 默认 deepseek-official。
-const DUAL_PROFILES = new Set(['his-studio', 'his-agent-internal'])
+const DUAL_PROFILES = new Set(['his-studio', 'his-agent-internal', 'his-web'])
 if (DUAL_PROFILES.has(profile)) {
   const defaultProvider = env.INTERNAL_LLM_API_KEY ? 'internal-openai' : 'deepseek-official'
   const defaultModel = defaultProvider === 'internal-openai' ? 'internal-chat' : 'deepseek-v4-flash'
