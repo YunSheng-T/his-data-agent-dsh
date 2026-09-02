@@ -41,13 +41,7 @@
 - id: session-telemetry-otel
   disabled: true
 
-# P0 边界：不做子 Agent / 后台任务
-- id: subagent
-  disabled: true
-- id: subagent-spawn-in-process
-  disabled: true
-- id: subagent-fork-in-process
-  disabled: true
+# P0 边界：只禁用「子 agent 触发/控制工具」，保留 subagent 核心服务（dsh-web 前端依赖它们）
 - id: tool-subagent-control
   disabled: true
 - id: tool-subagent-list-agents
