@@ -1,5 +1,5 @@
 export const name = 'ui-his-repo';
-export const inject = ['webServer', 'hisRepo'];
+export const inject = ['webServer', 'hisRepo', 'hisModeling'];
 function json(res, code, body) {
     const payload = JSON.stringify(body);
     res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
@@ -55,5 +55,23 @@ export function apply(ctx) {
             }
         },
     });
-    ctx.effect(() => () => { branches(); current(); tree(); }, 'ui-his-repo: web routes');
+    // 模型目录（只读）：模型列表按 layer 分组，含字段绑定率（bound/total）
+    const models = ctx.webServer.register({
+        kind: 'exact',
+        path: '/his-repo/models',
+        handler: async (_req, res) => {
+            try {
+                const list = Object.values(ctx.hisModeling._state.models).map((m) => ({
+                    file: m.file, name: m.name, cn: m.cn, domain: m.domain, layer: m.layer,
+                    version: m.version, published: m.published,
+                    bound: m.fields.filter((f) => f.std).length, total: m.fields.length,
+                }));
+                json(res, 200, { models: list });
+            }
+            catch (e) {
+                json(res, 500, { error: e instanceof Error ? e.message : String(e) });
+            }
+        },
+    });
+    ctx.effect(() => () => { branches(); current(); tree(); models(); }, 'ui-his-repo: web routes');
 }

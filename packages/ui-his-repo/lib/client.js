@@ -62,6 +62,21 @@ window.__ModuleLoader__.load({
 			} catch {}
 			return out;
 		}
+		async function fetchModels() {
+			try {
+				const r = await fetch("/his-repo/models").then((x) => x.json());
+				return Array.isArray(r?.models) ? r.models : [];
+			} catch {
+				return [];
+			}
+		}
+		const LAYER_ORDER = [
+			"ODS",
+			"DIM",
+			"DWD",
+			"DWS",
+			"ADS"
+		];
 		function buildTree(flat) {
 			const root = {
 				name: "",
@@ -178,9 +193,12 @@ window.__ModuleLoader__.load({
 				current: "",
 				tree: []
 			});
+			const [models, setModels] = (0, react.useState)([]);
 			const [error, setError] = (0, react.useState)("");
 			const [collapsed, setCollapsed] = (0, react.useState)(/* @__PURE__ */ new Set());
 			const [selected, setSelected] = (0, react.useState)("");
+			const [repoOpen, setRepoOpen] = (0, react.useState)(true);
+			const [modelOpen, setModelOpen] = (0, react.useState)(false);
 			(0, react.useEffect)(() => {
 				ensureCss();
 			}, []);
@@ -191,6 +209,10 @@ window.__ModuleLoader__.load({
 					if (!alive) return;
 					setRepo(r);
 					if (!r.branches.length && !r.tree.length) setError("代码仓服务未就绪");
+				})();
+				(async () => {
+					const m = await fetchModels();
+					if (alive) setModels(m);
 				})();
 				return () => {
 					alive = false;
@@ -237,6 +259,7 @@ window.__ModuleLoader__.load({
 				cursor: "pointer",
 				fontFamily: "inherit"
 			};
+			/** 代码仓文件树（depth 为相对「代码仓」文件夹的层级，1 = 顶层目录）。 */
 			const renderDir = (d, depth) => {
 				const isCollapsed = collapsed.has(d.path);
 				const pad = 4 + depth * 14;
@@ -294,68 +317,173 @@ window.__ModuleLoader__.load({
 				}
 				return out;
 			};
+			const groupedModels = (0, react.useMemo)(() => {
+				const groups = [];
+				for (const layer of LAYER_ORDER) {
+					const items = models.filter((m) => (m.layer || "").toUpperCase() === layer);
+					if (items.length) groups.push({
+						layer,
+						items
+					});
+				}
+				for (const m of models) {
+					const L = (m.layer || "").toUpperCase();
+					if (!LAYER_ORDER.includes(L) && !groups.some((g) => g.layer === (L || "未分层"))) groups.push({
+						layer: L || "未分层",
+						items: models.filter((x) => (x.layer || "").toUpperCase() === L)
+					});
+				}
+				return groups;
+			}, [models]);
+			/** 模型树（相对「模型」文件夹：layer 组 + 模型行）。 */
+			const renderModels = () => {
+				const out = [];
+				for (const g of groupedModels) {
+					out.push(/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+						role: "treeitem",
+						"aria-expanded": "true",
+						className: "hisR_projectRow",
+						style: {
+							...rowBase,
+							paddingLeft: 18,
+							cursor: "default"
+						},
+						children: [
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+								className: "hisR_slot hisR_folder hisR_folderActive",
+								children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)(IconFolderOpen16, {})
+							}),
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+								className: "hisR_projectText",
+								children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+									className: "hisR_title",
+									children: g.layer
+								})
+							}),
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+								className: "hisR_time",
+								style: { color: "var(--dsw-alias-label-caption)" },
+								children: g.items.length
+							})
+						]
+					}, "g" + g.layer));
+					for (const m of g.items) out.push(/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+						role: "treeitem",
+						onClick: () => setSelected(m.file),
+						className: "hisR_sessionRow hisR_flatSessionRowWithoutStatus" + (selected === m.file ? " hisR_selected" : ""),
+						style: {
+							...rowBase,
+							paddingLeft: 32
+						},
+						children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+							className: "hisR_title",
+							children: m.name
+						}), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", {
+							className: "hisR_time",
+							style: { color: m.published ? "var(--dsw-alias-state-success-primary)" : "var(--dsw-alias-label-tertiary)" },
+							children: [
+								m.bound,
+								"/",
+								m.total
+							]
+						})]
+					}, "m" + m.file));
+				}
+				return out;
+			};
+			/** 顶层文件夹行（代码仓 / 模型）。 */
+			const folderRow = (open, onToggle, glyph, title, extra) => /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+				role: "treeitem",
+				"aria-expanded": open,
+				onClick: onToggle,
+				className: "hisR_projectRow",
+				style: {
+					...rowBase,
+					paddingLeft: 4,
+					marginTop: 2
+				},
+				children: [
+					/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+						className: "hisR_slot hisR_folder" + (open ? " hisR_folderActive" : ""),
+						children: open ? /* @__PURE__ */ (0, react_jsx_runtime.jsx)(IconFolderOpen16, {}) : /* @__PURE__ */ (0, react_jsx_runtime.jsx)(IconFolderClose16, {})
+					}),
+					/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+						className: "hisR_slot hisR_chevron",
+						children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)(IconTriangleRight14, { open })
+					}),
+					/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+						className: "hisR_projectText",
+						children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+							className: "hisR_title",
+							children: title
+						})
+					}),
+					extra
+				]
+			});
 			return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 				className: "hisB_root",
 				children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 					className: "hisB_sectionHeader",
 					role: "presentation",
-					children: [
-						/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
-							className: "hisB_sectionLabel",
-							style: {
-								color: "var(--dsw-alias-label-tertiary)",
-								fontSize: 13
-							},
-							children: "代码仓"
-						}),
-						/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", { style: { flex: 1 } }),
-						/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
-							className: "hisB_headerActions",
-							style: { maxWidth: "none" },
-							children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("select", {
-								value: repo.current,
-								onChange: (e) => void pickBranch(e.target.value),
-								title: "分支",
-								style: {
-									height: 28,
-									maxWidth: 120,
-									borderRadius: 10,
-									border: "1px solid var(--dsw-alias-border-l2)",
-									background: "transparent",
-									color: "var(--dsw-alias-label-primary)",
-									fontSize: 12,
-									padding: "0 4px",
-									fontFamily: "inherit"
-								},
-								children: repo.branches.map((b) => /* @__PURE__ */ (0, react_jsx_runtime.jsx)("option", {
-									value: b,
-									children: b
-								}, b))
-							}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
-								type: "button",
-								className: "hisB_iconButton",
-								onClick: modeStore.toggle,
-								title: "返回会话浏览",
-								style: { fontSize: 12 },
-								children: "◀"
-							})]
-						})
-					]
+					style: { justifyContent: "flex-end" },
+					children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", { style: { flex: 1 } }), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
+						type: "button",
+						className: "hisB_iconButton",
+						onClick: modeStore.toggle,
+						title: "返回会话浏览",
+						style: { fontSize: 12 },
+						children: "◀"
+					})]
 				}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
 					className: "hisB_listArea",
 					children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
 						className: "hisB_treeBody",
-						children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+						children: /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 							className: "hisB_list",
 							role: "tree",
-							children: error ? /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
-								className: "hisB_empty",
-								style: { color: "var(--dsw-alias-state-error-primary)" },
-								children: error
-							}) : repo.tree.length === 0 ? /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
-								className: "hisB_empty",
-								children: "加载中…"
-							}) : renderDir(tree, 0)
+							children: [
+								folderRow(repoOpen, () => setRepoOpen((v) => !v), "▤", "代码仓", /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+									onClick: (e) => e.stopPropagation(),
+									children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)("select", {
+										value: repo.current,
+										onChange: (e) => void pickBranch(e.target.value),
+										title: "分支",
+										style: {
+											height: 26,
+											maxWidth: 110,
+											borderRadius: 8,
+											border: "1px solid var(--dsw-alias-border-l2)",
+											background: "transparent",
+											color: "var(--dsw-alias-label-primary)",
+											fontSize: 11,
+											padding: "0 4px",
+											fontFamily: "inherit"
+										},
+										children: repo.branches.map((b) => /* @__PURE__ */ (0, react_jsx_runtime.jsx)("option", {
+											value: b,
+											children: b
+										}, b))
+									})
+								})),
+								repoOpen && (error ? /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+									className: "hisB_empty",
+									style: { color: "var(--dsw-alias-state-error-primary)" },
+									children: error
+								}) : repo.tree.length === 0 ? /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+									className: "hisB_empty",
+									children: "加载中…"
+								}) : renderDir(tree, 0)),
+								folderRow(modelOpen, () => setModelOpen((v) => !v), "◇", "模型", /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+									className: "hisR_time",
+									style: { color: "var(--dsw-alias-label-caption)" },
+									children: models.length
+								})),
+								modelOpen && (models.length === 0 ? /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+									className: "hisB_empty",
+									children: "加载中…"
+								}) : renderModels())
+							]
 						})
 					})
 				})]

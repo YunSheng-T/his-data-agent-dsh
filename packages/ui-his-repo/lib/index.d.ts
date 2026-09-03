@@ -10,9 +10,32 @@ interface HisRepoFace {
         uncommitted?: boolean;
     }>;
 }
+/** hisModeling 服务接口（domain-tools-modeling 注册的 Provider）——模型目录用。 */
+interface HisModelFace {
+    _state: {
+        models: Record<string, {
+            file: string;
+            name: string;
+            cn: string;
+            domain: string;
+            layer: string;
+            version: string;
+            published: boolean;
+            fields: Array<{
+                n: string;
+                t: string;
+                c: string;
+                std: string | null;
+                pk?: boolean;
+                skip?: string;
+            }>;
+        }>;
+    };
+}
 declare module '@deepseek-ai/cordis' {
     interface Context {
         hisRepo: HisRepoFace;
+        hisModeling: HisModelFace;
     }
 }
 export declare const name = "ui-his-repo";

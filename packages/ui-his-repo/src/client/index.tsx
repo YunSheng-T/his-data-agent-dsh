@@ -8,6 +8,7 @@ import { SIDEBAR_CSS } from './workspace-css'
 
 interface RepoFileNode { path: string; kind: string; dirty?: string; uncommitted?: boolean }
 interface RepoTree { branches: string[]; current: string; tree: RepoFileNode[] }
+interface ModelItem { file: string; name: string; cn: string; domain: string; layer: string; version: string; published: boolean; bound: number; total: number }
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -55,6 +56,15 @@ async function fetchRepoTree(branch?: string): Promise<RepoTree> {
   } catch { /* host 未就绪 */ }
   return out
 }
+
+async function fetchModels(): Promise<ModelItem[]> {
+  try {
+    const r = await fetch('/his-repo/models').then((x) => x.json())
+    return Array.isArray(r?.models) ? r.models : []
+  } catch { return [] }
+}
+
+const LAYER_ORDER = ['ODS', 'DIM', 'DWD', 'DWS', 'ADS']
 
 interface DirNode { name: string; path: string; dirs: DirNode[]; files: RepoFileNode[] }
 function buildTree(flat: RepoFileNode[]): DirNode {
@@ -116,9 +126,12 @@ function ToggleAction(props: { wide: boolean }): JSX.Element {
 /** HIS 代码仓树视图。 */
 function HisRepoView(props: { wide: boolean; expandSidebar?: () => void }): JSX.Element {
   const [repo, setRepo] = useState<RepoTree>({ branches: [], current: '', tree: [] })
+  const [models, setModels] = useState<ModelItem[]>([])
   const [error, setError] = useState('')
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [selected, setSelected] = useState('')
+  const [repoOpen, setRepoOpen] = useState(true)
+  const [modelOpen, setModelOpen] = useState(false)
 
   useEffect(() => { ensureCss() }, [])
   useEffect(() => {
@@ -128,6 +141,10 @@ function HisRepoView(props: { wide: boolean; expandSidebar?: () => void }): JSX.
       if (!alive) return
       setRepo(r)
       if (!r.branches.length && !r.tree.length) setError('代码仓服务未就绪')
+    })()
+    void (async () => {
+      const m = await fetchModels()
+      if (alive) setModels(m)
     })()
     return () => { alive = false }
   }, [])
@@ -156,6 +173,7 @@ function HisRepoView(props: { wide: boolean; expandSidebar?: () => void }): JSX.
 
   const rowBase: React.CSSProperties = { width: '100%', cursor: 'pointer', fontFamily: 'inherit' }
 
+  /** 代码仓文件树（depth 为相对「代码仓」文件夹的层级，1 = 顶层目录）。 */
   const renderDir = (d: DirNode, depth: number): JSX.Element[] => {
     const isCollapsed = collapsed.has(d.path)
     const pad = 4 + depth * 14
@@ -188,25 +206,89 @@ function HisRepoView(props: { wide: boolean; expandSidebar?: () => void }): JSX.
     return out
   }
 
+  const groupedModels = useMemo(() => {
+    const groups: Array<{ layer: string; items: ModelItem[] }> = []
+    for (const layer of LAYER_ORDER) {
+      const items = models.filter((m) => (m.layer || '').toUpperCase() === layer)
+      if (items.length) groups.push({ layer, items })
+    }
+    for (const m of models) {
+      const L = (m.layer || '').toUpperCase()
+      if (!LAYER_ORDER.includes(L) && !groups.some((g) => g.layer === (L || '未分层'))) {
+        groups.push({ layer: L || '未分层', items: models.filter((x) => (x.layer || '').toUpperCase() === L) })
+      }
+    }
+    return groups
+  }, [models])
+
+  /** 模型树（相对「模型」文件夹：layer 组 + 模型行）。 */
+  const renderModels = (): JSX.Element[] => {
+    const out: JSX.Element[] = []
+    for (const g of groupedModels) {
+      out.push(
+        <div key={'g' + g.layer} role="treeitem" aria-expanded="true"
+          className="hisR_projectRow" style={{ ...rowBase, paddingLeft: 18, cursor: 'default' }}>
+          <span className="hisR_slot hisR_folder hisR_folderActive"><IconFolderOpen16 /></span>
+          <span className="hisR_projectText"><span className="hisR_title">{g.layer}</span></span>
+          <span className="hisR_time" style={{ color: 'var(--dsw-alias-label-caption)' }}>{g.items.length}</span>
+        </div>,
+      )
+      for (const m of g.items) {
+        out.push(
+          <div key={'m' + m.file} role="treeitem" onClick={() => setSelected(m.file)}
+            className={'hisR_sessionRow hisR_flatSessionRowWithoutStatus' + (selected === m.file ? ' hisR_selected' : '')}
+            style={{ ...rowBase, paddingLeft: 32 }}>
+            <span className="hisR_title">{m.name}</span>
+            <span className="hisR_time" style={{ color: m.published ? 'var(--dsw-alias-state-success-primary)' : 'var(--dsw-alias-label-tertiary)' }}>
+              {m.bound}/{m.total}
+            </span>
+          </div>,
+        )
+      }
+    }
+    return out
+  }
+
+  /** 顶层文件夹行（代码仓 / 模型）。 */
+  const folderRow = (open: boolean, onToggle: () => void, glyph: string, title: string, extra?: JSX.Element) => (
+    <div role="treeitem" aria-expanded={open} onClick={onToggle}
+      className="hisR_projectRow" style={{ ...rowBase, paddingLeft: 4, marginTop: 2 }}>
+      <span className={'hisR_slot hisR_folder' + (open ? ' hisR_folderActive' : '')}>
+        {open ? <IconFolderOpen16 /> : <IconFolderClose16 />}
+      </span>
+      <span className="hisR_slot hisR_chevron"><IconTriangleRight14 open={open} /></span>
+      <span className="hisR_projectText"><span className="hisR_title">{title}</span></span>
+      {extra}
+    </div>
+  )
+
   return (
     <div className="hisB_root">
-      <div className="hisB_sectionHeader" role="presentation">
-        <span className="hisB_sectionLabel" style={{ color: 'var(--dsw-alias-label-tertiary)', fontSize: 13 }}>代码仓</span>
+      {/* 顶部工具行：返回官方会话浏览 */}
+      <div className="hisB_sectionHeader" role="presentation" style={{ justifyContent: 'flex-end' }}>
         <span style={{ flex: 1 }} />
-        <div className="hisB_headerActions" style={{ maxWidth: 'none' }}>
-          <select value={repo.current} onChange={(e) => void pickBranch(e.target.value)} title="分支"
-            style={{ height: 28, maxWidth: 120, borderRadius: 10, border: '1px solid var(--dsw-alias-border-l2)', background: 'transparent', color: 'var(--dsw-alias-label-primary)', fontSize: 12, padding: '0 4px', fontFamily: 'inherit' }}>
-            {repo.branches.map((b) => <option key={b} value={b}>{b}</option>)}
-          </select>
-          <button type="button" className="hisB_iconButton" onClick={modeStore.toggle} title="返回会话浏览" style={{ fontSize: 12 }}>◀</button>
-        </div>
+        <button type="button" className="hisB_iconButton" onClick={modeStore.toggle} title="返回会话浏览" style={{ fontSize: 12 }}>◀</button>
       </div>
       <div className="hisB_listArea">
         <div className="hisB_treeBody">
           <div className="hisB_list" role="tree">
-            {error ? <div className="hisB_empty" style={{ color: 'var(--dsw-alias-state-error-primary)' }}>{error}</div>
+            {/* 代码仓 文件夹 */}
+            {folderRow(repoOpen, () => setRepoOpen((v) => !v), '▤', '代码仓', (
+              <span onClick={(e) => e.stopPropagation()}>
+                <select value={repo.current} onChange={(e) => void pickBranch(e.target.value)} title="分支"
+                  style={{ height: 26, maxWidth: 110, borderRadius: 8, border: '1px solid var(--dsw-alias-border-l2)', background: 'transparent', color: 'var(--dsw-alias-label-primary)', fontSize: 11, padding: '0 4px', fontFamily: 'inherit' }}>
+                  {repo.branches.map((b) => <option key={b} value={b}>{b}</option>)}
+                </select>
+              </span>
+            ))}
+            {repoOpen && (error ? <div className="hisB_empty" style={{ color: 'var(--dsw-alias-state-error-primary)' }}>{error}</div>
               : repo.tree.length === 0 ? <div className="hisB_empty">加载中…</div>
-              : renderDir(tree, 0)}
+              : renderDir(tree, 0))}
+            {/* 模型 文件夹 */}
+            {folderRow(modelOpen, () => setModelOpen((v) => !v), '◇', '模型', (
+              <span className="hisR_time" style={{ color: 'var(--dsw-alias-label-caption)' }}>{models.length}</span>
+            ))}
+            {modelOpen && (models.length === 0 ? <div className="hisB_empty">加载中…</div> : renderModels())}
           </div>
         </div>
       </div>
