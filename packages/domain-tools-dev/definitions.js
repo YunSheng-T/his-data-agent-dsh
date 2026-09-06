@@ -238,7 +238,7 @@ function gatedTools({ repo, sched, modeling, cicd, onto }) {
     {
       name: 'repo_commit', risk: 'commit',
       description: '【人工闸门 1 · 数据化审批 · 提交前预扫描】提交工作区全部变更到当前分支（暂存+提交一体，无单独 add 步骤）。**提交前先对未提交的 .etl/.sql/.ops 跑预扫描**（设计质量/SQL/一致性），发现差异（diff）则**阻断提交**并返回扫描细节，需人工确认或修复后才能提（无副作用）。若预扫描干净才真正提交，提交后自动触发 CICD 流水线。提交前必须已完成 lint 与 dry-run 验证；提交后文件才进入已提交视图（其他分支可见性按合并语义）',
-      parameters: { type: 'object', properties: { message: { type: 'string', description: '提交信息（建议含作业名与需求号）' }, force: { type: 'boolean', description: '预扫描有 diff 时强制忽略、仍要提交（默认 false，有 diff 必须确认后再提，显式 force=true 才放行）', }, }, required: ['message'] },
+      parameters: { type: 'object', properties: { message: { type: 'string', description: '提交信息（建议含作业名与需求号；ops 暂停/恢复场景写清「暂停+恢复成对 · N 条命令」）' }, force: { type: 'boolean', description: '预扫描有 diff 时强制忽略、仍要提交（默认 false，有 diff 必须确认后再提，显式 force=true 才放行）', }, }, required: ['message'] },
       output: jsonOut,
       execute: async ({ message, force }) => {
         // ── pre-hook：提交前先扫工作区未提交变更，有 diff 则阻断（不 commitAll，无副作用）──
@@ -422,7 +422,7 @@ function readTools({ repo, dryrun, modeling, cicd }) {
 
     {
       name: 'code_lint', risk: 'read',
-      description: 'ETL/调度代码检查：返回结构化问题清单（error/warn）。pass=false（有 error）时编排不变量要求不得生成 .dag、不得进入提交审批',
+      description: 'ETL/调度代码检查（规范性/高危质量检查，非一致性对账——设计态↔开发态一致性用 check_consistency）：返回结构化问题清单（error/warn）。pass=false（有 error）时编排不变量要求不得生成 .dag、不得进入提交审批',
       parameters: { type: 'object', properties: { ...pathParam, view: { type: 'string', enum: ['committed', 'working'], description: 'committed（默认）| working（工作区未提交态）。已提交视图缺失时自动回退工作区（未提交新作业也能扫）' } }, required: ['path'] },
       output: jsonOut,
       execute: async ({ path, view }) => {
