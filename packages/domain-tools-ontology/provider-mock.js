@@ -320,17 +320,23 @@ export const provider = {
         note: '模型锚点：沿 implements(逆向) 找到实现作业 → instanceOf 作业类型 → covers/appliesTo 找策略与规则；要扫哪些规则、怎么扫用 get_scan_plan',
       }
     }
-    // 代码仓锚点（分支 / 分支+目录）
+    // 代码仓锚点（分支 / 分支+目录 / 单个作业文件）
     const branch = anchor.branch
     const dir = anchor.dir || null
+    const path = anchor.path || null
+    const jobId = path ? 'job/' + path : null
     const dirId = dir ? 'dir/' + dir : null
-    const jobs = dirId ? traverse(graph, dirId, 'inDirectory', { reverse: true }).map((id) => getObject(graph, id)).filter(Boolean)
+    const jobs = jobId
+      ? [getObject(graph, jobId)].filter(Boolean)
+      : dirId ? traverse(graph, dirId, 'inDirectory', { reverse: true }).map((id) => getObject(graph, id)).filter(Boolean)
       : Object.values(graph.objects).filter((o) => o.type === 'Job')
     const jobTypeIds = [...new Set(jobs.map((j) => traverse(graph, 'job/' + j.path, 'instanceOf')[0]).filter(Boolean))]
-    const anchored = dirId
+    const anchored = jobId
+      ? { kind: 'repo', objectType: { type: 'Job', typeName: '作业' }, id: jobId, name: path, branch }
+      : dirId
       ? { kind: 'repo', objectType: { type: 'Directory', typeName: '作业目录' }, id: dirId, name: dir, branch }
       : { kind: 'repo', objectType: { type: 'Job', typeName: '作业集合' }, id: 'repo/' + branch, name: branch, branch }
-    const why = '锚定=代码仓 ' + branch + (dir ? '/' + dir : '') + ' → 作业 ' + jobs.length + ' 个 → instanceOf 作业类型 ' + (jobTypeIds.map((id) => getObject(graph, id)?.name).join('/') || '—')
+    const why = '锚定=代码仓 ' + branch + (path ? '/' + path : dir ? '/' + dir : '') + ' → 作业 ' + jobs.length + ' 个 → instanceOf 作业类型 ' + (jobTypeIds.map((id) => getObject(graph, id)?.name).join('/') || '—')
     return {
       ok: true,
       anchored,
@@ -342,7 +348,8 @@ export const provider = {
       jobs: jobs.map((j) => j.path),
       jobTypes: jobTypeIds.map((id) => { const o = getObject(graph, id); return { id, name: o.name } }),
       why,
-      note: dir ? '目录锚点：沿 instanceOf 到作业类型后，用 policies_for / rules_for 取策略与规则' : '分支锚点：请锚定到具体作业目录（workspace_anchor 传 branch+dir）做对象级推理',
+      note: path ? '作业锚点：沿 instanceOf 到作业类型后，用 policies_for / rules_for 取策略与规则；一致性用 check_consistency，规范性用 code_lint / danger_scan'
+        : dir ? '目录锚点：沿 instanceOf 到作业类型后，用 policies_for / rules_for 取策略与规则' : '分支锚点：请锚定到具体作业目录（workspace_anchor 传 branch+dir）做对象级推理',
     }
   },
 

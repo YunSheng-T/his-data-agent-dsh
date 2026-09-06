@@ -8,7 +8,11 @@ declare module '@deepseek-ai/cordis' {
                 id?: string;
                 order?: number;
                 label?: string;
-            }, component: (props: never) => React.JSX.Element): () => void;
+                children?: Record<string, {
+                    kind: string;
+                    scope: string;
+                }>;
+            }, component: (props: any) => React.JSX.Element): () => void;
             inject(key: string, callback: () => (() => void) | Iterable<() => void>): () => void;
         };
     }
