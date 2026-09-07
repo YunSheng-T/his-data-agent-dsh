@@ -1179,22 +1179,36 @@ function HisBrandMark(props: { size?: number }): JSX.Element {
     <span style={{ width: s, height: s, borderRadius: s * 0.3, background: 'var(--dsw-alias-brand-primary, #2b6de0)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: s * 0.5, fontWeight: 700, fontFamily: 'ui-monospace, monospace', flex: 'none' }} aria-hidden>H</span>
   )
 }
-/** 侧栏品牌名 = 分段滑块（工作区 ↔ HIS 数据），切换 sidebar.workspaces 内容。 */
+/** 侧栏品牌名：品牌 "Data Studio" + 分段滑块（工作区 ↔ HIS 数据），切换 sidebar.workspaces 内容。 */
 function HisBrandName(): JSX.Element {
   const isHis = useSyncExternalStore(modeStore.subscribe, modeStore.isHis)
   const setMode = (his: boolean) => { if (isHis !== his) modeStore.toggle() }
   const seg = (active: boolean, label: string, onSel: () => void) => (
     <button type="button" onClick={(e) => { e.stopPropagation(); onSel() }}
-      style={{ height: 22, padding: '0 9px', borderRadius: 7, border: 'none', background: active ? 'var(--dsw-alias-bg-layer-2, #ffffff)' : 'transparent', color: active ? 'var(--dsw-alias-label-primary)' : 'var(--dsw-alias-label-tertiary)', fontSize: 11.5, fontFamily: 'inherit', cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: active ? 600 : 400, transition: 'background .15s, color .15s' }}>
+      style={{ height: 20, padding: '0 8px', borderRadius: 6, border: 'none', background: active ? 'var(--dsw-alias-bg-layer-2, #ffffff)' : 'transparent', color: active ? 'var(--dsw-alias-label-primary)' : 'var(--dsw-alias-label-tertiary)', fontSize: 10.5, fontFamily: 'inherit', cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: active ? 600 : 400, transition: 'background .15s, color .15s' }}>
       {label}
     </button>
   )
   return (
-    <div style={{ display: 'inline-flex', alignItems: 'center', background: 'rgba(127,127,127,.18)', borderRadius: 9, padding: 2, gap: 2 }}
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 3, minWidth: 0, lineHeight: 1 }}
       onClick={(e) => e.stopPropagation()}>
-      {seg(!isHis, '工作区', () => setMode(false))}
-      {seg(isHis, 'HIS 数据', () => setMode(true))}
+      <span style={{ fontSize: 16, fontWeight: 600, letterSpacing: '.01em', color: 'var(--dsw-alias-label-primary)', whiteSpace: 'nowrap' }}>Data Studio</span>
+      <div style={{ display: 'inline-flex', alignItems: 'center', background: 'rgba(127,127,127,.18)', borderRadius: 7, padding: 1.5, gap: 1.5 }}>
+        {seg(!isHis, '工作区', () => setMode(false))}
+        {seg(isHis, 'HIS 数据', () => setMode(true))}
+      </div>
     </div>
+  )
+}
+
+/** 会话空状态品牌：H + "Data Agent"，替换官方 DeepSeek 鱼 + "探索未至之境"。 */
+function HisHeroBrand(props: { size?: number; className?: string }): JSX.Element {
+  const s = props.size ?? 34
+  return (
+    <span className={props.className} style={{ display: 'inline-flex', alignItems: 'center', gap: 10, fontSize: 26, fontWeight: 500, lineHeight: '32px', color: 'var(--dsw-alias-label-primary)' }}>
+      <span style={{ width: s, height: s, borderRadius: s * 0.28, background: 'var(--dsw-alias-brand-primary, #2b6de0)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: s * 0.45, fontWeight: 700, fontFamily: 'ui-monospace, monospace', flex: 'none' }} aria-hidden>H</span>
+      <span style={{ whiteSpace: 'nowrap' }}>Data Agent</span>
+    </span>
   )
 }
 
@@ -1205,6 +1219,8 @@ export function apply(ctx: ClientContext): void {
   // 替换侧栏品牌（shadow 官方 ui-brand-official：priority -1 赢默认 0）
   ctx.slots.inject('sidebar.brand.mark', () => ctx.slots.register({ name: 'sidebar.brand.mark', priority: -1 }, (props: any) => HisBrandMark(props as { size?: number })))
   ctx.slots.inject('sidebar.brand.name', () => ctx.slots.register({ name: 'sidebar.brand.name', priority: -1 }, () => HisBrandName()))
+  // 会话空状态品牌：替换官方 DeepSeek 鱼 + "探索未至之境"
+  ctx.slots.inject('conversation.hero.brand.mark', () => ctx.slots.register({ name: 'conversation.hero.brand.mark', priority: -1 }, (props: any) => HisHeroBrand(props as { size?: number; className?: string })))
   // 提供 ctx.layout（官方 ui-layout 已禁，ui-sidebar/ui-conversation 依赖这 3 个方法）
   ctx.provide('layout', {
     toggleSidebar: () => layoutStore.toggleSidebar(),
