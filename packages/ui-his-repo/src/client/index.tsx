@@ -570,14 +570,14 @@ function IconTriangleRight14({ size = 14, open }: { size?: number; open: boolean
 }
 
 /** footer 切换钮。 */
+/** footer 切换钮：wide 由顶部滑块接管，仅 rail（收起）态显示图标切换。 */
 function ToggleAction(props: { wide: boolean }): JSX.Element {
   const isHis = useSyncExternalStore(modeStore.subscribe, modeStore.isHis)
+  if (props.wide) return <></>
   return (
-    <button type="button" onClick={modeStore.toggle} title={isHis ? '返回会话浏览' : 'HIS 数据工作台'}
-      className="hisR_projectRow"
-      style={{ width: '100%', border: 'none', background: isHis ? 'var(--dsw-alias-interactive-bg-hover)' : 'transparent', color: isHis ? 'var(--dsw-alias-state-business-primary)' : 'var(--dsw-alias-label-secondary)', cursor: 'pointer', justifyContent: props.wide ? 'flex-start' : 'center', padding: props.wide ? '0 8px' : 0 }}>
-      <span className="hisR_slot" style={{ fontSize: 14 }}>{isHis ? '◀' : '▤'}</span>
-      {props.wide ? <span className="hisR_title" style={{ fontSize: 13 }}>{isHis ? '返回会话浏览' : 'HIS 数据工作台'}</span> : null}
+    <button type="button" onClick={modeStore.toggle} title={isHis ? 'HIS 数据工作台' : '工作区'}
+      style={{ width: 36, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', background: 'transparent', color: 'var(--dsw-alias-label-secondary)', cursor: 'pointer', borderRadius: 8, fontSize: 14 }}>
+      {isHis ? '▤' : '◀'}
     </button>
   )
 }
@@ -938,6 +938,11 @@ function HisRepoView(props: { wide: boolean; expandSidebar?: () => void }): JSX.
   const [createName, setCreateName] = useState('')
 
   useEffect(() => { ensureCss() }, [])
+  // HIS 模式下隐藏官方「新会话」按钮（其上方 logoRow/下方区域不动），官方按钮固定不可插槽，用 body 类 + CSS 隐藏
+  useEffect(() => {
+    document.body.classList.add('his-sidebar-his')
+    return () => document.body.classList.remove('his-sidebar-his')
+  }, [])
   useEffect(() => {
     let alive = true
     void (async () => {
@@ -966,7 +971,8 @@ function HisRepoView(props: { wide: boolean; expandSidebar?: () => void }): JSX.
   const confirmCreate = async () => {
     if (!createTarget || !createName.trim()) return
     const name = createName.trim()
-    const target = createTarget.dir + '/' + name
+    // dir 为空 = 顶部「新文件」：createName 直接是完整路径；否则为目录内文件名
+    const target = createTarget.dir ? createTarget.dir + '/' + name : name
     const r = await createFile(target)
     if (r?.error) { /* 静默，树刷新后不出现即失败 */ }
     setCreateTarget(null); setCreateName('')
@@ -1083,11 +1089,11 @@ function HisRepoView(props: { wide: boolean; expandSidebar?: () => void }): JSX.
 
   return (
     <div className="hisB_root">
-      {/* 顶部工具行：返回官方会话浏览 */}
-      <div className="hisB_sectionHeader" role="presentation" style={{ justifyContent: 'flex-end' }}>
-        <span style={{ flex: 1 }} />
-        <button type="button" className="hisB_iconButton" onClick={modeStore.toggle} title="返回会话浏览" style={{ fontSize: 12 }}>◀</button>
-      </div>
+      {/* 顶部「新文件」（官方「新会话」已在 HIS 模式隐藏，此按钮占据同位） */}
+      <button type="button" className="hisB_newFile" title="新建文件（完整路径）"
+        onClick={(e) => { const rc = e.currentTarget.getBoundingClientRect(); setCreateName(''); setCreateTarget({ dir: '', x: rc.left, y: rc.bottom }) }}>
+        ＋ 新文件
+      </button>
       <div className="hisB_listArea">
         <div className="hisB_treeBody">
           <div className="hisB_list" role="tree">
@@ -1109,11 +1115,20 @@ function HisRepoView(props: { wide: boolean; expandSidebar?: () => void }): JSX.
               <>
                 <div style={{ position: 'fixed', inset: 0, zIndex: 999 }} onClick={() => setCreateTarget(null)} />
                 <div style={{ position: 'fixed', left: Math.min(createTarget.x, (typeof window !== 'undefined' ? window.innerWidth : 800) - 260), top: createTarget.y + 8, zIndex: 1000, width: 250, background: 'var(--dsw-alias-bg-layer-2, #1b1f27)', border: '1px solid var(--dsw-alias-border-l2)', borderRadius: 12, boxShadow: '0 12px 32px rgba(0,0,0,.45)', padding: 12 }}>
-                  <div style={{ fontSize: 12, color: 'var(--dsw-alias-label-secondary)' }}>新建到 <span style={{ fontFamily: 'var(--ds-font-family-code, monospace)', color: 'var(--dsw-alias-label-primary)' }}>{createTarget.dir}/</span></div>
-                  <div style={{ fontSize: 11, color: 'var(--dsw-alias-label-caption)', marginTop: 2 }}>{DIR_TYPE_HINT[createTarget.dir] || '新建文件'}</div>
+                  {createTarget.dir ? (
+                    <>
+                      <div style={{ fontSize: 12, color: 'var(--dsw-alias-label-secondary)' }}>新建到 <span style={{ fontFamily: 'var(--ds-font-family-code, monospace)', color: 'var(--dsw-alias-label-primary)' }}>{createTarget.dir}/</span></div>
+                      <div style={{ fontSize: 11, color: 'var(--dsw-alias-label-caption)', marginTop: 2 }}>{DIR_TYPE_HINT[createTarget.dir] || '新建文件'}</div>
+                    </>
+                  ) : (
+                    <>
+                      <div style={{ fontSize: 12, color: 'var(--dsw-alias-label-secondary)' }}>新建文件</div>
+                      <div style={{ fontSize: 11, color: 'var(--dsw-alias-label-caption)', marginTop: 2 }}>完整路径：目录/文件名.类型，如 dag/dwd_x.dag；按目录自动套模板</div>
+                    </>
+                  )}
                   <input autoFocus value={createName} onChange={(e) => setCreateName(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') void confirmCreate(); if (e.key === 'Escape') setCreateTarget(null) }}
-                    placeholder="文件名（如 x.sql / x.dag / x.etl）"
+                    placeholder={createTarget.dir ? '文件名（如 x.sql / x.dag / x.etl）' : '完整路径，如 dag/dwd_x.dag / etl/ads_x.etl'}
                     style={{ width: '100%', boxSizing: 'border-box', height: 28, marginTop: 10, borderRadius: 8, border: '1px solid var(--dsw-alias-border-l2)', background: 'transparent', color: 'var(--dsw-alias-label-primary)', fontSize: 12.5, padding: '0 8px', fontFamily: 'inherit', outline: 'none' }} />
                   <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
                     <button type="button" onClick={() => void confirmCreate()} style={{ flex: 1, height: 28, borderRadius: 8, border: 'none', background: 'var(--dsw-alias-button-primary-fill, #2b6de0)', color: '#fff', fontSize: 12.5, fontFamily: 'inherit', cursor: 'pointer' }}>新建</button>
@@ -1157,10 +1172,39 @@ function HisAppFrame(props: { renderSlot: (key: string, owner?: unknown, opts?: 
   )
 }
 
+/** 侧栏品牌 mark（替换官方 DeepSeek 图标）。 */
+function HisBrandMark(props: { size?: number }): JSX.Element {
+  const s = props.size ?? 24
+  return (
+    <span style={{ width: s, height: s, borderRadius: s * 0.3, background: 'var(--dsw-alias-brand-primary, #2b6de0)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: s * 0.5, fontWeight: 700, fontFamily: 'ui-monospace, monospace', flex: 'none' }} aria-hidden>H</span>
+  )
+}
+/** 侧栏品牌名 = 分段滑块（工作区 ↔ HIS 数据），切换 sidebar.workspaces 内容。 */
+function HisBrandName(): JSX.Element {
+  const isHis = useSyncExternalStore(modeStore.subscribe, modeStore.isHis)
+  const setMode = (his: boolean) => { if (isHis !== his) modeStore.toggle() }
+  const seg = (active: boolean, label: string, onSel: () => void) => (
+    <button type="button" onClick={(e) => { e.stopPropagation(); onSel() }}
+      style={{ height: 22, padding: '0 9px', borderRadius: 7, border: 'none', background: active ? 'var(--dsw-alias-bg-layer-2, #ffffff)' : 'transparent', color: active ? 'var(--dsw-alias-label-primary)' : 'var(--dsw-alias-label-tertiary)', fontSize: 11.5, fontFamily: 'inherit', cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: active ? 600 : 400, transition: 'background .15s, color .15s' }}>
+      {label}
+    </button>
+  )
+  return (
+    <div style={{ display: 'inline-flex', alignItems: 'center', background: 'rgba(127,127,127,.18)', borderRadius: 9, padding: 2, gap: 2 }}
+      onClick={(e) => e.stopPropagation()}>
+      {seg(!isHis, '工作区', () => setMode(false))}
+      {seg(isHis, 'HIS 数据', () => setMode(true))}
+    </div>
+  )
+}
+
 export const inject = ['slots']
 
 export function apply(ctx: ClientContext): void {
   ensureCss()
+  // 替换侧栏品牌（shadow 官方 ui-brand-official：priority -1 赢默认 0）
+  ctx.slots.inject('sidebar.brand.mark', () => ctx.slots.register({ name: 'sidebar.brand.mark', priority: -1 }, (props: any) => HisBrandMark(props as { size?: number })))
+  ctx.slots.inject('sidebar.brand.name', () => ctx.slots.register({ name: 'sidebar.brand.name', priority: -1 }, () => HisBrandName()))
   // 提供 ctx.layout（官方 ui-layout 已禁，ui-sidebar/ui-conversation 依赖这 3 个方法）
   ctx.provide('layout', {
     toggleSidebar: () => layoutStore.toggleSidebar(),
