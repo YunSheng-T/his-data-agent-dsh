@@ -13,8 +13,10 @@
 #   3) 本文件可被会话区 provider/model 下拉修改（写回 agent-default-model）。
 
 agent-default-model:
-  provider: internal-openai
-  model: internal-chat
+  provider: deepseek-official
+  model: deepseek-v4-flash
+ui-onboarding:
+  welcomeNoticeVersion: 2026-08-13.1
 
 # 示例：给 internal-openai 加多个可选模型（取消注释并按需改）
 # llm-pi-ai:

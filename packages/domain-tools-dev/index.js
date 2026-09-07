@@ -27,6 +27,7 @@ export function apply(ctx) {
     upstream: (repo, path) => upstream(repo, path),
     downstream: (repo, path) => downstream(repo, path),
     jobsForModel: (repo, modelFile) => jobsForModel(repo, modelFile),
+    scanScriptJob: (repo, modeling, onto, path) => scanScriptJob(repo, modeling, onto, path),
   })
   // hisDryrun：dry-run 沙箱 Provider 透出（studio-ui「测试运行」页签走服务层，约束固化在 Provider）
   ctx.provide('hisDryrun', dryrun)

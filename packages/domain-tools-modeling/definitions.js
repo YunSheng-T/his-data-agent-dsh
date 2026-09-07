@@ -27,7 +27,7 @@ export function buildDefinitions(p) {
     {
       name: 'model_create',
       risk: 'workspace-write',
-      description: '新建数据模型（写入·gated）：按分层命名惯例创建 .model，可一次性带字段；建完即为 v0.1 未发布态，后续走绑标准/提版本/发布流',
+      description: '新建数据模型（写入·gated）：文件名按分层前缀命名（dim_/dwd_/dws_/ads_/ods_，如 dwd_tax_declaration.model）；可一次性带字段并直绑标准；分区字段 dt 自动追加不用传；建完即为 v0.1 未发布态，后续走绑标准/提版本/发布流',
       parameters: {
         type: 'object',
         properties: {
@@ -95,7 +95,7 @@ export function buildDefinitions(p) {
     {
       name: 'model_bind_std',
       risk: 'workspace-write',
-      description: '把模型字段绑定到数据标准（工作区写入·未提交态，需 model_commit 才生效）',
+      description: '把模型字段绑定到数据标准（工作区写入·未提交态，需 model_commit 才生效）。若报「不在标准库或草案列表中」，先调 std_create_draft 起草该标准（gated，拿草案编号），再重新 model_bind_std；绑定后汇报注明草案需平台人工审定后才正式发布',
       parameters: {
         type: 'object',
         properties: { ...MODEL_ARG, field: S('string'), std: S('string', { description: '标准引用，如 std/DECL_STATUS v1' }) },

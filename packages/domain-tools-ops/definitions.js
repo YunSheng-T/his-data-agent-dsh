@@ -15,7 +15,7 @@ export function buildOpsTools({ repo, ops }) {
   return [
     {
       name: 'ops_screen', risk: 'read',
-      description: '作业筛选（编排第一步）：按域/类型/优先级从作业目录筛出编排目标清单，自动排除核心保留与实时任务（含排除原因）。返回清单必须先向用户回显口径，经确认后才进入生成',
+      description: '作业筛选（编排第一步）：按域/类型/优先级从作业目录筛出编排目标清单，自动排除核心保留与实时任务（含排除原因）。清单确认**不做对话式确认**（对话里贴清单问「确认吗」会断流程）——直接继续 ops_topo 血缘排序，最终清单在 ops_gen 审批卡（approvalNote 写清清单/排除项/排序/约束）由人工确认',
       parameters: {
         type: 'object',
         properties: {

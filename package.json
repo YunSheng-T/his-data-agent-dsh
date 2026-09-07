@@ -9,7 +9,8 @@
     "studio": "node scripts/dsh-run.mjs --profile his-studio",
     "agent": "node scripts/dsh-run.mjs --profile his-data-agent",
     "agent:internal": "node scripts/dsh-run.mjs --profile his-agent-internal",
-    "test:regression": "node tests/regression/run-all.mjs"
+    "test:regression": "node tests/regression/run-all.mjs",
+    "web": "node scripts/dsh-run.mjs --profile his-web"
   },
   "dependencies": {
     "@deepseek-ai/dsh": "0.1.1-rc.2"

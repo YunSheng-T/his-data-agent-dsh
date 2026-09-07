@@ -32,8 +32,20 @@ function modelAnchorText(s) {
   ].join('\n')
 }
 
-function repoAnchorText(repo, branch, dir) {
+function repoAnchorText(repo, branch, dir, path) {
   const tree = repo.treeWithState(branch)
+  if (path) {
+    const f = tree.find((e) => e.path === path)
+    const text = repo.readWorking(path) ?? repo.readCommitted(branch, path)
+    const engine = (text?.match(/--\s*@engine:\s*(\S+)/) || [])[1] ?? '—'
+    const target = (text?.match(/--\s*@target:\s*(\S+)/) || [])[1] ?? '—'
+    return [
+      '[workspace.anchor] 当前工作区锚定对象（开发空间 · 单个作业文件）',
+      '作业: ' + path + ' · 类型: ' + (path.split('.').pop() || '?') + (f?.dirty || f?.uncommitted ? ' · 工作区未提交' : ''),
+      '引擎: ' + engine + ' · 目标: ' + target,
+      '提示: 扫描该作业用 cicd_scan_report / code_lint / check_consistency；血缘用 get_lineage_upstream / get_lineage_downstream；全文用 job_read',
+    ].join('\n')
+  }
   const inDir = dir ? tree.filter((e) => e.path.startsWith(dir.replace(/\/?$/, '/'))) : tree
   const dirty = tree.filter((e) => e.dirty || e.uncommitted)
   const t = repo.currentTenant?.() // P3 租户层（门面方法，单仓 Provider 无此方法时降级不显示）
@@ -73,13 +85,16 @@ export function apply(ctx) {
     if (args.branch) {
       const repo = ctx.hisRepo
       const exists = repo.branches().includes(args.branch)
-      const actual = repo.checkout(args.branch, { create: !exists })
+      // 同分支不 checkout：工作区有未提交修改时 git checkout 会因冲突失败；已在目标分支直接锚定即可
+      const actual = repo.currentBranch() === args.branch ? args.branch : repo.checkout(args.branch, { create: !exists })
       const dir = args.dir ?? null
+      const path = args.path ?? null
       if (dir && !/^(etl|dag|ops|dbscript|svc)(\/[a-z0-9_-]+)*$/i.test(dir)) throw new Error(`非法作业目录: ${dir}（只接受 etl/*、dag、ops、dbscript、svc）`)
-      current = { kind: 'repo', branch: actual, dir, key: `repo:${actual}:${dir ?? ''}@${repo.isClean() ? 'clean' : 'dirty'}`, at: new Date().toISOString() }
+      if (path && !/^(etl|dag|ops|dbscript|svc)\/[a-z0-9_\-\/]+\.(etl|dag|ops|sql|svc)$/i.test(path)) throw new Error(`非法作业文件: ${path}（只接受 etl/*、dag、ops、dbscript、svc 下的 .etl/.dag/.ops/.sql/.svc）`)
+      current = { kind: 'repo', branch: actual, dir, path, key: `repo:${actual}:${path ?? dir ?? ''}@${repo.isClean() ? 'clean' : 'dirty'}`, at: new Date().toISOString() }
       console.error(`[anchor] 锚定 -> ${current.key}${exists ? '' : '（新建分支）'}`)
       const stale = staleJobs(ctx, repo, actual)
-      return { space: '开发空间', repo: repo.dir.split('/').pop(), branch: actual, created: !exists, dir, tree: repo.treeWithState(actual), staleJobs: stale }
+      return { space: '开发空间', repo: repo.dir.split('/').pop(), branch: actual, created: !exists, dir, path, tree: repo.treeWithState(actual), staleJobs: stale }
     }
     if (args.file) {
       const s = ctx.hisModeling.anchorSummary(args.file)
@@ -108,6 +123,7 @@ export function apply(ctx) {
         file: { type: 'string', description: '模型文件名，如 dwd_tax_declaration.model' },
         branch: { type: 'string', description: '代码仓分支名（不存在时自动从当前分支新建），如 feature/invoice' },
         dir: { type: 'string', description: '作业目录（配合 branch），如 etl/dwd 或 dag' },
+        path: { type: 'string', description: '单个作业文件（配合 branch），如 etl/dwd/dwd_tax_declaration.etl，锚定到作业粒度' },
       },
     },
     output: {
@@ -125,7 +141,7 @@ export function apply(ctx) {
     lastInjectedKey = current.key
     let text
     if (current.kind === 'repo') {
-      text = repoAnchorText(ctx.hisRepo, current.branch, current.dir)
+      text = repoAnchorText(ctx.hisRepo, current.branch, current.dir, current.path)
       const stale = staleJobs(ctx, ctx.hisRepo, current.branch)
       if (stale.length) {
         text += '\n' + [
@@ -138,7 +154,7 @@ export function apply(ctx) {
       text = modelAnchorText(ctx.hisModeling.anchorSummary(current.file))
     }
     const summary = current.kind === 'repo'
-      ? `锚定切换: ${current.branch}${current.dir ? '/' + current.dir : ''}`
+      ? `锚定切换: ${current.branch}${current.path ? '/' + current.path : current.dir ? '/' + current.dir : ''}`
       : `锚定切换: ${current.file}`
     console.error(`[anchor] 注入锚定摘要 -> step ${payload.step}`)
     return {
