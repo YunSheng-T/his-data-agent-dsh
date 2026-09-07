@@ -7,7 +7,7 @@ import { parseEtl, parseDag, locateColumn } from './ast.js'
 import { lintEtl, lintDag } from './lint.js'
 import { genEtl, genDag, genSql, patchColumn } from './codegen.js'
 import { extractTable, extractEngine } from '../domain-tools-ontology/ontology.js'
-import { upstream as lineageUp, downstream as lineageDown, jobsForModel } from './lineage.js'
+import { upstream as lineageUp, downstream as lineageDown, jobsForModel, jobIndex } from './lineage.js'
 import { scanVerdict } from './provider-cicd.js'
 
 const jsonOut = { schema: { type: 'object' }, render: (_a, v) => [{ type: 'text', text: JSON.stringify(v, null, 2) }] }
@@ -198,6 +198,67 @@ export function buildDevTools({ repo, dryrun, modeling, sched, cicd, onto }) {
         const text = genDag({ ref, cron, depends: depends ?? [], timeout: timeout ?? 1800 })
         const written = repo.writeWorking(dagPath, text)
         return { generated: true, ...written, ref, lint: lintDag(text, parseDag(text)) }
+      },
+    },
+
+    {
+      name: 'schedule_design', risk: 'workspace-write',
+      description: '从一段调度任务设计生成一组调度脚本（.dag）：输入目标数据资产模型 + 涉及的 ETL 作业清单 + cron，自动按作业血缘推导依赖拓扑序，为每个 ETL 生成对应 .dag（depends 自动串到前序作业），批量返回。语义：dag_gen 是单作业、schedule_design 是从设计批量编排一组作业调度。生成后走 repo_commit → sched_publish → asset_sync 回写资产血缘（生成与上线分离，符合 gated 语义）',
+      parameters: {
+        type: 'object',
+        properties: {
+          design: { type: 'string', description: '调度任务设计描述（自然语言摘要，如「每天凌晨 2 点把 ODS 申报单加载到 DWD 缴款表，再加工 DWS 汇总，产出 ADS 日报资产」）' },
+          model: { type: 'string', description: '目标数据资产模型文件名，如 ads_tax_daily.model' },
+          jobs: { type: 'array', items: { type: 'string' }, description: '涉及的 .etl 作业路径数组（按加工顺序，如 etl/dwd/dwd_tax_payment.etl）；缺省时从 model 反查 jobsForModel' },
+          cron: { type: 'string', description: 'cron 触发表达式（避开整点/半点），如 "17 2 * * *"' },
+          timeout: { type: 'number', description: '超时秒数（默认 1800）' },
+        },
+        required: ['design', 'model', 'cron'],
+      },
+      output: jsonOut,
+      execute: async ({ design, model, jobs, cron, timeout }) => {
+        const tmo = timeout ?? 1800
+        // 1. 确定涉及的作业清单：显式 jobs 优先，否则从目标模型反查
+        let jobList = jobs ?? []
+        if (!jobList.length) jobList = jobsForModel(repo, model).map((j) => j.path)
+        if (!jobList.length) throw new Error(`无法确定涉及的 ETL 作业：jobs 为空且模型 ${model} 反查不到作业`)
+        // 2. 校验每个作业存在 + lint 通过（复用 dag_gen 双保险不变量）
+        for (const p of jobList) {
+          const t = repo.readWorking(p) ?? repo.readCommitted(repo.currentBranch(), p)
+          if (t == null) throw new Error(`作业不存在: ${p}`)
+          const l = lintEtl(t, parseEtl(t))
+          if (!l.pass) return { generated: false, blocked: true, reason: `编排不变量：${p} lint 不过 → 不生成 dag`, lint: l }
+        }
+        // 3. 用全仓血缘推导作业间依赖拓扑序（谁加工谁 → depends 谁）
+        const { etls } = jobIndex(repo)
+        const byTable = new Map(etls.filter((e) => e.parsed.targetTable).map((e) => [e.parsed.targetTable.split('.').pop(), e.path]))
+        const depOf = (jobPath) => {
+          const t = repo.readCommitted(repo.currentBranch(), jobPath) ?? repo.readWorking(jobPath)
+          const parsed = parseEtl(t)
+          return parsed.fromTables
+            .map((f) => byTable.get(f.split('.').pop()))
+            .filter((src) => src && src !== jobPath && jobList.includes(src))
+        }
+        // 拓扑序：依赖者在前；无环保证（简单 DFS，作业数小）
+        const order = []; const visited = new Set();
+        const visit = (p, stack = new Set()) => {
+          if (visited.has(p)) return; if (stack.has(p)) throw new Error(`调度依赖成环: ${p}`);
+          stack.add(p);
+          for (const up of depOf(p)) visit(up, stack);
+          stack.delete(p); visited.add(p); order.push(p);
+        };
+        for (const p of jobList) visit(p);
+        // 4. 按拓扑序批量生成 .dag（depends 自动填前序 dag 路径）
+        const generated = [];
+        const dagPathOf = (jobPath) => `dag/${jobPath.split('/').pop().replace(/\.etl$/, '')}.dag`
+        const dependsOf = (jobPath) => depOf(jobPath).map(dagPathOf)
+        for (const p of order) {
+          const text = genDag({ ref: p, cron, depends: dependsOf(p), timeout: tmo })
+          const dagPath = dagPathOf(p)
+          const written = repo.writeWorking(dagPath, text)
+          generated.push({ ...written, ref: p, cron, depends: dependsOf(p), lint: lintDag(text, parseDag(text)) })
+        }
+        return { generated: true, design, model, cron, order: order.map((p) => p.split('/').pop()), dags: generated, note: '已批量生成调度脚本到工作区未提交态；提交走 repo_commit → sched_publish → asset_sync 回写资产血缘' }
       },
     },
 
