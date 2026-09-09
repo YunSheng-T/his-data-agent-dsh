@@ -12,6 +12,10 @@ interface HisRepoFace {
   readWorking(path: string): string | null
   readCommitted(branch: string, path: string): string | null
   writeWorking(path: string, content: string): unknown
+  /** 单调递增版本号：任何写操作/外部 git 变化自增。 */
+  revision: number
+  /** 订阅仓变更；返回退订函数。 */
+  subscribe(fn: () => void): () => void
 }
 
 /** hisModeling 服务接口（domain-tools-modeling 注册的 Provider）——模型目录 + ER 图。 */
@@ -182,6 +186,35 @@ export function apply(ctx: Context): void {
         const branch = url.searchParams.get('branch') ?? repo().currentBranch()
         json(res, 200, { branch, tree: repo().treeWithState(branch) })
       } catch (e) { json(res, 500, { error: e instanceof Error ? e.message : String(e) }) }
+    },
+  })
+  // SSE：仓变更推送（revision 变化即写 data 事件；浏览器据此自动刷新树）
+  const events = ctx.webServer.register({
+    kind: 'exact',
+    path: '/his-repo/events',
+    handler: async (req, res) => {
+      try {
+        res.writeHead(200, {
+          'content-type': 'text/event-stream; charset=utf-8',
+          'cache-control': 'no-cache, no-transform',
+          'connection': 'keep-alive',
+          'x-accel-buffering': 'no',
+        })
+        res.write('retry: 2000\n\n')
+        const r = repo()
+        let last = typeof r.revision === 'number' ? r.revision : -1
+        res.write(`data: ${JSON.stringify({ revision: r.revision })}\n\n`)
+        const off = r.subscribe(() => {
+          const cur = r.revision
+          if (cur !== last) {
+            last = cur
+            res.write(`data: ${JSON.stringify({ revision: cur })}\n\n`)
+          }
+        })
+        req.on('close', () => off())
+      } catch (e) {
+        try { res.writeHead(500, { 'content-type': 'application/json' }); res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) })) } catch { /* 连接已断 */ }
+      }
     },
   })
   // 模型目录（只读）：模型列表按 layer 分组，含字段绑定率（bound/total）

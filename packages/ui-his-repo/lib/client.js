@@ -54672,6 +54672,10 @@ window.__ModuleLoader__.load({
 					path = p;
 					listeners.forEach((f) => f());
 				},
+				close: () => {
+					path = null;
+					listeners.forEach((f) => f());
+				},
 				subscribe: (fn) => {
 					listeners.add(fn);
 					return () => {
@@ -54790,6 +54794,10 @@ window.__ModuleLoader__.load({
 				get: () => file,
 				open: (f) => {
 					file = f;
+					listeners.forEach((fn) => fn());
+				},
+				close: () => {
+					file = null;
 					listeners.forEach((fn) => fn());
 				},
 				subscribe: (fn) => {
@@ -56661,6 +56669,24 @@ window.__ModuleLoader__.load({
 					branches: prev.branches.length ? prev.branches : r.branches
 				}));
 			};
+			const refreshRef = (0, react.useRef)(() => {});
+			refreshRef.current = () => {
+				refreshTree();
+			};
+			(0, react.useEffect)(() => {
+				if (typeof EventSource === "undefined") return;
+				let es = null;
+				try {
+					es = new EventSource("/his-repo/events");
+					es.onmessage = () => {
+						refreshRef.current();
+					};
+					es.onerror = () => {};
+				} catch {}
+				return () => {
+					es?.close();
+				};
+			}, []);
 			const confirmCreate = async () => {
 				if (!createTarget || !createName.trim()) return;
 				const name = createName.trim();
@@ -56766,6 +56792,7 @@ window.__ModuleLoader__.load({
 							onClick: () => {
 								setSelected(f.path);
 								openFileStore.open(f.path);
+								openModelStore.close();
 								postAnchor({
 									branch: repo.current,
 									path: f.path
@@ -56844,6 +56871,7 @@ window.__ModuleLoader__.load({
 						onClick: () => {
 							setSelected(m.file);
 							openModelStore.open(m.file);
+							openFileStore.close();
 							postAnchor({ file: m.file });
 						},
 						className: "hisR_sessionRow hisR_flatSessionRowWithoutStatus" + (selected === m.file ? " hisR_selected" : ""),

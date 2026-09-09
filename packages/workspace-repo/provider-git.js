@@ -8,11 +8,39 @@
 
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
+import { watch } from 'node:fs'
 import path from 'node:path'
 
 export class GitRepoProvider {
   constructor(dir) {
     this.dir = dir
+    this.revision = 0
+    this._listeners = new Set()
+    this._watcher = null
+  }
+
+  /** 订阅仓变更：任何写操作（本 provider 或外部 git）触发 revision++ 并通知订阅者。返回退订函数。 */
+  subscribe(fn) {
+    this._listeners.add(fn)
+    this._startWatch()
+    return () => { this._listeners.delete(fn) }
+  }
+
+  /** 单调递增版本号：订阅者只关心「变了，重新读」，不关心具体 diff。 */
+  _bump() {
+    this.revision += 1
+    for (const fn of this._listeners) { try { fn() } catch { /* 订阅者异常不打断通知 */ } }
+  }
+
+  /** 尽力而为监听 .git（外部 git commit/checkout 触发 _bump）；内部写操作已显式 _bump，不依赖此监听。 */
+  _startWatch() {
+    if (this._watcher) return
+    const target = path.join(this.dir, '.git')
+    if (!fs.existsSync(target)) return
+    try {
+      this._watcher = watch(target, () => this._bump())
+      this._watcher.on('error', () => {})
+    } catch { /* 平台不支持时静默降级为纯显式 bump */ }
   }
 
   git(...args) {
@@ -41,6 +69,7 @@ export class GitRepoProvider {
     }
     this.git('add', '-A')
     this.git('commit', '--allow-empty', '-qm', message) // 空种子（空租户占位仓）也允许
+    this._bump()
     return this
   }
 
@@ -56,6 +85,7 @@ export class GitRepoProvider {
   checkout(branch, { create = false } = {}) {
     if (!/^[A-Za-z0-9/_-]+$/.test(branch)) throw new Error(`非法分支名: ${branch}`)
     this.git('checkout', ...(create ? ['-b'] : []), branch)
+    this._bump()
     return this.currentBranch()
   }
 
@@ -110,9 +140,12 @@ export class GitRepoProvider {
     if (kind === 'ops' && !relPath.startsWith('ops/')) throw new Error(`.ops 必须放在 ops/ 下: ${relPath}`)
     if (kind === 'script' && !relPath.startsWith('dbscript/')) throw new Error(`.sql 必须放在 dbscript/ 下: ${relPath}`)
     if (kind === 'svc' && !relPath.startsWith('svc/')) throw new Error(`.svc 必须放在 svc/ 下: ${relPath}`)
+    if (kind === 'job' && !relPath.startsWith('jobs/')) throw new Error(`作业模块必须放在 jobs/ 下: ${relPath}`)
+    if (kind === 'jobmanifest' && relPath !== 'jobs.yml') throw new Error(`装配清单必须是仓库根的 jobs.yml: ${relPath}`)
     const abs = path.join(this.dir, relPath)
     fs.mkdirSync(path.dirname(abs), { recursive: true })
     fs.writeFileSync(abs, content)
+    this._bump()
     return { path: relPath, kind, bytes: Buffer.byteLength(content) }
   }
 
@@ -126,12 +159,14 @@ export class GitRepoProvider {
     const files = this.status().map((s) => s.path)
     this.git('add', '-A')
     this.git('commit', '-qm', message)
+    this._bump()
     return { committed: true, commitId: this.git('rev-parse', '--short', 'HEAD'), branch: this.currentBranch(), files }
   }
 
   /** 仅暂存（git_add 工具用；不改历史，workspace-write 语义） */
   add(paths) {
     this.git('add', '--', ...paths)
+    this._bump()
     return { staged: paths }
   }
 
@@ -142,12 +177,15 @@ export class GitRepoProvider {
   }
 }
 
-/** 文件类型契约：.etl = ETL 作业；.dag = 调度作业（yaml）；.ops = 运维编排制品（V13）；其余拒绝 */
+/** 文件类型契约：.etl = ETL 作业；.dag = 调度作业（yaml）；.ops = 运维编排制品（V13）；
+ * jobs/*.js = 新 DSL 作业模块（defineJob）；jobs.yml = 新 DSL 装配清单；其余拒绝 */
 export function fileKind(p) {
   if (p.endsWith('.etl')) return 'etl'
   if (p.endsWith('.dag')) return 'dag'
   if (p.endsWith('.ops')) return 'ops'
   if (p.endsWith('.sql')) return 'script'
   if (p.endsWith('.svc')) return 'svc'
+  if (p.endsWith('.js') && p.startsWith('jobs/')) return 'job'
+  if (p === 'jobs.yml') return 'jobmanifest'
   return 'other'
 }

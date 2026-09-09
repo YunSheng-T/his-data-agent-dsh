@@ -12,6 +12,10 @@ interface HisRepoFace {
     readWorking(path: string): string | null;
     readCommitted(branch: string, path: string): string | null;
     writeWorking(path: string, content: string): unknown;
+    /** 单调递增版本号：任何写操作/外部 git 变化自增。 */
+    revision: number;
+    /** 订阅仓变更；返回退订函数。 */
+    subscribe(fn: () => void): () => void;
 }
 /** hisModeling 服务接口（domain-tools-modeling 注册的 Provider）——模型目录 + ER 图。 */
 interface ModelField {

@@ -112,6 +112,7 @@ const openFileStore = (() => {
   return {
     get: () => path,
     open: (p: string) => { path = p; listeners.forEach((f) => f()) },
+    close: () => { path = null; listeners.forEach((f) => f()) },
     subscribe: (fn: () => void) => { listeners.add(fn); return () => { listeners.delete(fn) } },
   }
 })()
@@ -226,6 +227,7 @@ const openModelStore = (() => {
   return {
     get: () => file,
     open: (f: string) => { file = f; listeners.forEach((fn) => fn()) },
+    close: () => { file = null; listeners.forEach((fn) => fn()) },
     subscribe: (fn: () => void) => { listeners.add(fn); return () => { listeners.delete(fn) } },
   }
 })()
@@ -968,6 +970,19 @@ function HisRepoView(props: { wide: boolean; expandSidebar?: () => void }): JSX.
     const r = await fetchRepoTree(repo.current || undefined)
     setRepo((prev) => ({ ...prev, tree: r.tree, branches: prev.branches.length ? prev.branches : r.branches }))
   }
+  // 订阅仓变更：底层 git 变化（Agent 提交 / 外部 git 操作）时自动刷新树
+  const refreshRef = useRef<() => void>(() => {})
+  refreshRef.current = () => { void refreshTree() }
+  useEffect(() => {
+    if (typeof EventSource === 'undefined') return
+    let es: EventSource | null = null
+    try {
+      es = new EventSource('/his-repo/events')
+      es.onmessage = () => { refreshRef.current() }
+      es.onerror = () => { /* 连接断开由浏览器自动重连 */ }
+    } catch { /* EventSource 不可用时降级为手动刷新 */ }
+    return () => { es?.close() }
+  }, [])
   const confirmCreate = async () => {
     if (!createTarget || !createName.trim()) return
     const name = createName.trim()
@@ -1020,7 +1035,7 @@ function HisRepoView(props: { wide: boolean; expandSidebar?: () => void }): JSX.
       for (const f of d.files) {
         const isSel = selected === f.path
         out.push(
-          <div key={'f' + f.path} role="treeitem" aria-selected={isSel} onClick={() => { setSelected(f.path); openFileStore.open(f.path); void postAnchor({ branch: repo.current, path: f.path }) }}
+          <div key={'f' + f.path} role="treeitem" aria-selected={isSel} onClick={() => { setSelected(f.path); openFileStore.open(f.path); openModelStore.close(); void postAnchor({ branch: repo.current, path: f.path }) }}
             className={'hisR_sessionRow hisR_flatSessionRowWithoutStatus' + (isSel ? ' hisR_selected' : '')} style={{ ...rowBase, paddingLeft: pad + 14 }}>
             <span className="hisR_title">{f.path.slice(f.path.lastIndexOf('/') + 1)}</span>
             {(f.uncommitted || f.dirty) ? <span className="hisR_time" style={{ color: 'var(--dsw-alias-state-error-primary)' }}>未提交</span> : null}
@@ -1060,7 +1075,7 @@ function HisRepoView(props: { wide: boolean; expandSidebar?: () => void }): JSX.
       )
       for (const m of g.items) {
         out.push(
-          <div key={'m' + m.file} role="treeitem" onClick={() => { setSelected(m.file); openModelStore.open(m.file); void postAnchor({ file: m.file }) }}
+          <div key={'m' + m.file} role="treeitem" onClick={() => { setSelected(m.file); openModelStore.open(m.file); openFileStore.close(); void postAnchor({ file: m.file }) }}
             className={'hisR_sessionRow hisR_flatSessionRowWithoutStatus' + (selected === m.file ? ' hisR_selected' : '')}
             style={{ ...rowBase, paddingLeft: 32 }}>
             <span className="hisR_title">{m.name}</span>

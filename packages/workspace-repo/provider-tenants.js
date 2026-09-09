@@ -38,6 +38,8 @@ export class TenantRepoProvider {
     this.root = rootDir
     this.repos = new Map()
     this.current = 'finance'
+    this.revision = 0
+    this._listeners = new Set()
     if (legacyDir) this.#migrateLegacy(legacyDir)
   }
 
@@ -60,6 +62,7 @@ export class TenantRepoProvider {
       console.error(`[workspace-repo] 租户仓已初始化: ${tenantId}/${t.repo}（${Object.keys(seedFiles).length} 个种子文件）`)
     }
     this.repos.set(tenantId, repo)
+    repo.subscribe(() => this._notify())
     return repo
   }
 
@@ -76,6 +79,16 @@ export class TenantRepoProvider {
     repo.git('add', '-A')
     repo.git('commit', '-qm', message)
     return true
+  }
+
+  /** 订阅任意租户仓的变更（聚合通知）；revision 为所有仓单调计数。切租户无需重绑。 */
+  subscribe(fn) {
+    this._listeners.add(fn)
+    return () => { this._listeners.delete(fn) }
+  }
+  _notify() {
+    this.revision += 1
+    for (const fn of this._listeners) { try { fn() } catch { /* 订阅者异常不打断通知 */ } }
   }
 
   // ---------- 租户语义 ----------
