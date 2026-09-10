@@ -5,7 +5,8 @@
 
 import { parseEtl, parseDag, locateColumn } from './ast.js'
 import { lintEtl, lintDag } from './lint.js'
-import { genEtl, genDag, genSql, patchColumn } from './codegen.js'
+import { genEtl, genSql, patchColumn } from './codegen.js'
+import { generateJob, upsertManifestEntry } from '../domain-tools-scheduler/codegen.js'
 import { extractTable, extractEngine } from '../domain-tools-ontology/ontology.js'
 import { upstream as lineageUp, downstream as lineageDown, jobsForModel, jobIndex } from './lineage.js'
 import { scanVerdict } from './provider-cicd.js'
@@ -119,35 +120,37 @@ export function buildDevTools({ repo, dryrun, modeling, sched, cicd, onto }) {
   const writeTools = [
     {
       name: 'etl_codegen', risk: 'workspace-write',
-      description: '从建模空间的模型版本生成 ETL 作业（.etl）到工作区未提交态：逐列注释携带该版本的标准绑定引用。模型绑定变更后重新生成即同步。返回附 lint 自检结果',
+      description: '从建模空间的模型版本生成 ETL 作业代码(jobs/<id>.js,kind=etl,SQL 内嵌,列级标准引用注释保留在 SQL 中)与 jobs.yml 装配条目;编译自检通过才落盘。老格式(.etl/.dag)已冻结不再生成。schedule 默认 @daily,dependsOn 默认空。',
       parameters: {
         type: 'object',
         properties: {
           model: { type: 'string', description: '模型文件名，如 dwd_tax_declaration.model' },
-          jobPath: { type: 'string', description: '目标作业路径，如 etl/dwd/dwd_tax_declaration.etl' },
+          jobPath: { type: 'string', description: '作业 id 来源路径(仅取文件名),如 etl/dwd/dwd_tax_declaration.etl' },
           source: { type: 'string', description: '来源表，如 ods.ods_tax_declare_di' },
+          schedule: { type: 'string', description: '调度表达式(默认 @daily),如 17 2 * * *' },
+          dependsOn: { type: 'array', items: { type: 'string' }, description: '依赖的作业 id(须已在 jobs.yml 中)' },
         },
         required: ['model', 'jobPath', 'source'],
       },
       output: jsonOut,
-      execute: async ({ model, jobPath, source }) => {
+      execute: async ({ model, jobPath, source, schedule = '@daily', dependsOn = [] }) => {
         const m = modeling.readFields(model)
         const text = genEtl({ model: m, jobPath, source })
-        const written = repo.writeWorking(jobPath, text)
-        const lint = lintEtl(text, parseEtl(text))
+        const id = jobPath.split('/').pop().replace(/\.etl$/, '')
+        const result = await generateJob(repo, { id, module: `jobs/${id}.js`, schedule, dependsOn, kind: 'etl', sql: text })
+        const parsed = parseEtl(text)
         return {
-          ...written,
+          ...result,
           fromModel: { file: m.file, version: m.version, published: m.published, bindingRate: m.bindingRate },
-          stdRefs: parseEtl(text).columns.filter((c) => c.stdRef).map((c) => `${c.alias} → ${c.stdRef}`),
+          stdRefs: parsed.columns.filter((c) => c.stdRef).map((c) => `${c.alias} → ${c.stdRef}`),
           warn: m.published ? null : '模型未发布：代码已生成但未发布模型的引用可能变动，正式上线前请先发布模型',
-          lint,
         }
       },
     },
 
     {
       name: 'sql_create', risk: 'workspace-write',
-      description: '新建 SQL 脚本作业（dbscript/*.sql）到工作区未提交态：生成可编辑模板（@engine/@job/@target 注解头 + 列映射占位，逐列可挂 @std/v 标准引用注释）。用于数据库脚本 / DDL 订正类；新建后可与已提交版对比（dirty）、与模型设计态做一致性扫描。不覆盖已存在文件（存在则改走编辑/etl_patch）',
+      description: '新建 SQL 脚本作业代码(jobs/<id>.js,kind=script,sqlRef 指向 dbscript/*.sql)+ SQL 文件 + jobs.yml 装配条目;编译自检通过才落盘。不覆盖已存在 SQL 文件(存在则改走 etl_patch / 手工改工作区)。',
       parameters: {
         type: 'object',
         properties: {
@@ -155,61 +158,58 @@ export function buildDevTools({ repo, dryrun, modeling, sched, cicd, onto }) {
           target: { type: 'string', description: '目标表，如 dwd.dwd_tax_payment；缺省取文件名尾' },
           mode: { type: 'string', description: 'ddl（默认，ALTER TABLE ADD COLUMNS 订正型）或 query（SELECT 查询型）；缺省 ddl' },
           columns: { type: 'array', items: { type: 'object', properties: { name: { type: 'string' }, expr: { type: 'string' }, type: { type: 'string' }, comment: { type: 'string' } } }, description: '可选列清单（name/expr/type/comment）；缺省生成占位列' },
+          schedule: { type: 'string', description: '调度表达式(默认 @daily)' },
+          dependsOn: { type: 'array', items: { type: 'string' }, description: '依赖的作业 id(须已在 jobs.yml 中)' },
         },
         required: ['path'],
       },
       output: jsonOut,
-      execute: async ({ path, target, columns, mode }) => {
+      execute: async ({ path, target, columns, mode, schedule = '@daily', dependsOn = [] }) => {
         if (!path.startsWith('dbscript/') || !path.endsWith('.sql')) throw new Error(`SQL 脚本必须放 dbscript/ 下且 .sql 结尾: ${path}`)
         const existing = repo.readWorking(path) ?? repo.readCommitted(repo.currentBranch(), path)
         if (existing != null) return { created: false, reason: `文件已存在: ${path}（不覆盖；编辑走 etl_patch / 手工改工作区）`, path }
         const text = genSql({ path, target, columns, mode })
-        const written = repo.writeWorking(path, text)
+        const id = path.split('/').pop().replace(/\.sql$/, '')
+        const result = await generateJob(repo, { id, module: `jobs/${id}.js`, schedule, dependsOn, kind: 'script', sqlRef: path, sql: text })
         const targetTable = extractTable(text)
-        const ast = parseEtl(text)
-        const colNames = ast.columns.map((c) => c.alias).filter(Boolean)
-        return { created: true, ...written, engine: extractEngine(text) ?? 'Hive SQL', targetTable, columns: colNames.length ? colNames : (columns || []).map((c) => c.name).filter(Boolean), note: '新建 .sql 到工作区未提交态；与模型设计态一致性走本体扫描，提交走 repo_commit（提交前预扫描）' }
+        const colNames = parseEtl(text).columns.map((c) => c.alias).filter(Boolean)
+        return { created: true, ...result, engine: extractEngine(text) ?? 'Hive SQL', targetTable, columns: colNames.length ? colNames : (columns || []).map((c) => c.name).filter(Boolean), note: '新管线产物:模块 + SQL 引用 + 装配条目；提交走 repo_commit，发布走 deploy_job' }
       },
     },
 
     {
       name: 'dag_gen', risk: 'workspace-write',
-      description: '生成调度作业（.dag，yaml：cron/依赖/重试/告警，ref 指向 .etl）。双保险：ref 的 .etl lint 有 error 时拒绝生成（编排不变量固化在工具层）',
+      description: '为既有作业模块生成/更新 jobs.yml 调度条目(schedule/dependsOn/env.TIMEOUT),不改模块文件;写盘后全量编译自检(依赖/环/调度表达式)。ref 指向 jobs/<id>.js(新)或 <dir>/<id>.etl(老,只取文件名派生 id);模块须已由 etl_codegen/job_codegen 生成。',
       parameters: {
         type: 'object',
         properties: {
-          ref: { type: 'string', description: '指向的 .etl 路径，如 etl/dwd/dwd_tax_declaration.etl' },
+          ref: { type: 'string', description: '作业模块引用,如 jobs/dwd_tax_declaration.js(或老 .etl 路径派生 id)' },
           cron: { type: 'string', description: 'cron 触发表达式（避开整点/半点），如 "17 2 * * *"' },
-          depends: { type: 'array', items: { type: 'string' }, description: '上游 .dag 依赖列表' },
+          depends: { type: 'array', items: { type: 'string' }, description: '上游作业 id 列表' },
           timeout: { type: 'number', description: '超时秒数（默认 1800）' },
         },
         required: ['ref', 'cron'],
       },
       output: jsonOut,
-      execute: async ({ ref, cron, depends, timeout }) => {
-        const etlText = repo.readWorking(ref) ?? repo.readCommitted(repo.currentBranch(), ref)
-        if (etlText == null) throw new Error(`ref 指向的 .etl 不存在: ${ref}`)
-        const etlLint = lintEtl(etlText, parseEtl(etlText))
-        if (!etlLint.pass) {
-          return { generated: false, blocked: true, reason: '编排不变量：lint 不过 → 不生成 dag', etlLint }
-        }
-        const job = ref.split('/').pop().replace(/\.etl$/, '')
-        const dagPath = `dag/${job}.dag`
-        const text = genDag({ ref, cron, depends: depends ?? [], timeout: timeout ?? 1800 })
-        const written = repo.writeWorking(dagPath, text)
-        return { generated: true, ...written, ref, lint: lintDag(text, parseDag(text)) }
+      execute: async ({ ref, cron, depends = [], timeout = 1800 }) => {
+        const id = ref.startsWith('jobs/') && ref.endsWith('.js') ? ref.slice(5, -3) : ref.split('/').pop().replace(/\.etl$/, '')
+        const module = `jobs/${id}.js`
+        const mod = repo.readWorking(module) ?? repo.readCommitted(repo.currentBranch(), module)
+        if (mod == null) throw new Error(`作业模块不存在: ${module}(先 etl_codegen / job_codegen 生成作业代码)`)
+        const result = await upsertManifestEntry(repo, { id, module, schedule: cron, dependsOn: depends, env: { TIMEOUT: timeout } })
+        return { generated: true, ...result }
       },
     },
 
     {
       name: 'schedule_design', risk: 'workspace-write',
-      description: '从一段调度任务设计生成一组调度脚本（.dag）：输入目标数据资产模型 + 涉及的 ETL 作业清单 + cron，自动按作业血缘推导依赖拓扑序，为每个 ETL 生成对应 .dag（depends 自动串到前序作业），批量返回。语义：dag_gen 是单作业、schedule_design 是从设计批量编排一组作业调度。生成后走 repo_commit → sched_publish → asset_sync 回写资产血缘（生成与上线分离，符合 gated 语义）',
+      description: '从一段调度任务设计批量编排一组作业的 jobs.yml 装配条目(不改模块文件):输入目标数据资产模型 + 涉及的作业清单 + cron,按血缘(老 .etl 只读事实源)推导依赖拓扑序,逐个 upsert manifest 条目,每步全量编译自检。模块须已由 etl_codegen/job_codegen 生成。',
       parameters: {
         type: 'object',
         properties: {
           design: { type: 'string', description: '调度任务设计描述（自然语言摘要，如「每天凌晨 2 点把 ODS 申报单加载到 DWD 缴款表，再加工 DWS 汇总，产出 ADS 日报资产」）' },
           model: { type: 'string', description: '目标数据资产模型文件名，如 ads_tax_daily.model' },
-          jobs: { type: 'array', items: { type: 'string' }, description: '涉及的 .etl 作业路径数组（按加工顺序，如 etl/dwd/dwd_tax_payment.etl）；缺省时从 model 反查 jobsForModel' },
+          jobs: { type: 'array', items: { type: 'string' }, description: '涉及的作业路径数组（老 .etl 路径作血缘事实源 / 作业 id 来源）；缺省时从 model 反查 jobsForModel' },
           cron: { type: 'string', description: 'cron 触发表达式（避开整点/半点），如 "17 2 * * *"' },
           timeout: { type: 'number', description: '超时秒数（默认 1800）' },
         },
@@ -222,14 +222,12 @@ export function buildDevTools({ repo, dryrun, modeling, sched, cicd, onto }) {
         let jobList = jobs ?? []
         if (!jobList.length) jobList = jobsForModel(repo, model).map((j) => j.path)
         if (!jobList.length) throw new Error(`无法确定涉及的 ETL 作业：jobs 为空且模型 ${model} 反查不到作业`)
-        // 2. 校验每个作业存在 + lint 通过（复用 dag_gen 双保险不变量）
+        // 2. 血缘事实源必须可读(老 .etl 冻结为只读,仍是血缘来源)
         for (const p of jobList) {
-          const t = repo.readWorking(p) ?? repo.readCommitted(repo.currentBranch(), p)
+          const t = repo.readCommitted(repo.currentBranch(), p) ?? repo.readWorking(p)
           if (t == null) throw new Error(`作业不存在: ${p}`)
-          const l = lintEtl(t, parseEtl(t))
-          if (!l.pass) return { generated: false, blocked: true, reason: `编排不变量：${p} lint 不过 → 不生成 dag`, lint: l }
         }
-        // 3. 用全仓血缘推导作业间依赖拓扑序（谁加工谁 → depends 谁）
+        // 3. 用全仓血缘推导作业间依赖拓扑序(谁加工谁 → depends 谁)
         const { etls } = jobIndex(repo)
         const byTable = new Map(etls.filter((e) => e.parsed.targetTable).map((e) => [e.parsed.targetTable.split('.').pop(), e.path]))
         const depOf = (jobPath) => {
@@ -248,17 +246,20 @@ export function buildDevTools({ repo, dryrun, modeling, sched, cicd, onto }) {
           stack.delete(p); visited.add(p); order.push(p);
         };
         for (const p of jobList) visit(p);
-        // 4. 按拓扑序批量生成 .dag（depends 自动填前序 dag 路径）
-        const generated = [];
-        const dagPathOf = (jobPath) => `dag/${jobPath.split('/').pop().replace(/\.etl$/, '')}.dag`
-        const dependsOf = (jobPath) => depOf(jobPath).map(dagPathOf)
+        // 4. 按拓扑序批量 upsert jobs.yml 条目(depends 为作业 id)
+        const generated = []
+        const idOf = (jobPath) => jobPath.split('/').pop().replace(/\.etl$/, '')
         for (const p of order) {
-          const text = genDag({ ref: p, cron, depends: dependsOf(p), timeout: tmo })
-          const dagPath = dagPathOf(p)
-          const written = repo.writeWorking(dagPath, text)
-          generated.push({ ...written, ref: p, cron, depends: dependsOf(p), lint: lintDag(text, parseDag(text)) })
+          const id = idOf(p)
+          const module = `jobs/${id}.js`
+          const mod = repo.readWorking(module) ?? repo.readCommitted(repo.currentBranch(), module)
+          if (mod == null) return { generated: false, blocked: true, reason: `作业模块不存在: ${module}(先 etl_codegen 生成作业代码)`, job: p }
+          const depends = depOf(p).map(idOf)
+          const result = await upsertManifestEntry(repo, { id, module, schedule: cron, dependsOn: depends, env: { TIMEOUT: tmo } })
+          if (!result.ok) return { generated: false, blocked: true, reason: `编译自检失败: ${p}`, diagnostics: result.diagnostics }
+          generated.push({ ...result, job: p, depends })
         }
-        return { generated: true, design, model, cron, order: order.map((p) => p.split('/').pop()), dags: generated, note: '已批量生成调度脚本到工作区未提交态；提交走 repo_commit → sched_publish → asset_sync 回写资产血缘' }
+        return { generated: true, design, model, cron, order: order.map(idOf), entries: generated, note: '已批量写入 jobs.yml 装配条目(模块文件未动)；提交走 repo_commit，发布走 deploy_job' }
       },
     },
 
@@ -298,13 +299,15 @@ function gatedTools({ repo, sched, modeling, cicd, onto }) {
   return [
     {
       name: 'repo_commit', risk: 'commit',
-      description: '【人工闸门 1 · 数据化审批 · 提交前预扫描】提交工作区全部变更到当前分支（暂存+提交一体，无单独 add 步骤）。**提交前先对未提交的 .etl/.sql/.ops 跑预扫描**（设计质量/SQL/一致性），发现差异（diff）则**阻断提交**并返回扫描细节，需人工确认或修复后才能提（无副作用）。若预扫描干净才真正提交，提交后自动触发 CICD 流水线。提交前必须已完成 lint 与 dry-run 验证；提交后文件才进入已提交视图（其他分支可见性按合并语义）',
-      parameters: { type: 'object', properties: { message: { type: 'string', description: '提交信息（建议含作业名与需求号；ops 暂停/恢复场景写清「暂停+恢复成对 · N 条命令」）' }, force: { type: 'boolean', description: '预扫描有 diff 时强制忽略、仍要提交（默认 false，有 diff 必须确认后再提，显式 force=true 才放行）', }, }, required: ['message'] },
+      description: '【人工闸门 1 · 数据化审批 · 提交前预扫描】提交工作区变更到当前分支（暂存+提交一体，无单独 add 步骤）。缺省全量提交；传 files 则只提交指定路径、其余未提交文件保留在工作区。**提交前先对未提交的 .etl/.sql/.ops 跑预扫描**（设计质量/SQL/一致性），发现差异（diff）则**阻断提交**并返回扫描细节，需人工确认或修复后才能提（无副作用）。若预扫描干净才真正提交，提交后自动触发 CICD 流水线。提交前必须已完成 lint 与 dry-run 验证；提交后文件才进入已提交视图（其他分支可见性按合并语义）',
+      parameters: { type: 'object', properties: { message: { type: 'string', description: '提交信息（建议含作业名与需求号；ops 暂停/恢复场景写清「暂停+恢复成对 · N 条命令」）' }, files: { type: 'array', items: { type: 'string' }, description: '选择性提交：仅提交这些路径（相对仓根的作业文件，如 etl/x.etl、dag/x.dag）。缺省则提交工作区全部未提交变更；传了 files 只提交指定路径，其余未提交文件保留在工作区。' }, force: { type: 'boolean', description: '预扫描有 diff 时强制忽略、仍要提交（默认 false，有 diff 必须确认后再提，显式 force=true 才放行）', }, }, required: ['message'] },
       output: jsonOut,
-      execute: async ({ message, force }) => {
+      execute: async ({ message, force, files }) => {
+        const scope = Array.isArray(files) && files.length ? files : null
         // ── pre-hook：提交前先扫工作区未提交变更，有 diff 则阻断（不 commitAll，无副作用）──
         const dirtyFiles = repo.status().filter((s) => s.state !== 'D').map((s) => s.path)
           .filter((p) => p.endsWith('.etl') || p.endsWith('.sql') || p.endsWith('.ops'))
+          .filter((p) => (scope ? scope.includes(p) : true))
         const preScan = {}
         for (const f of dirtyFiles) {
           const text = repo.readWorking(f)
@@ -317,7 +320,7 @@ function gatedTools({ repo, sched, modeling, cicd, onto }) {
         if (diffFiles.length && !force) {
           return { gate: 'commit', blocked: true, preScan: diffs, scanned: Object.keys(preScan), note: '⚠ 提交前预扫描发现差异，已阻断提交（无副作用）。请先修复或经人工确认后，用 force=true 显式提交：' + diffFiles.join(', ') }
         }
-        const r = repo.commitAll(message)
+        const r = scope ? repo.commitPaths(scope, message) : repo.commitAll(message)
         if (!r.committed) return { ...r, gate: 'commit', note: '无变更未产生提交' }
         // 提交即触发 CICD 流水线：对本次提交的 .etl/.ops 现场计算扫描快照（演示态本地计算，正式版走 CICD API）
         const scans = {}

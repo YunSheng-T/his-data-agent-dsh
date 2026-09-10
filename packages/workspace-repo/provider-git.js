@@ -170,6 +170,17 @@ export class GitRepoProvider {
     return { staged: paths }
   }
 
+  /** 选择性提交：仅暂存并提交指定路径，其余未提交变更保留在工作区（workspace-write 语义，供 repo_commit 的 files 参数用）。 */
+  commitPaths(paths, message) {
+    const dirty = new Set(this.status().map((s) => s.path))
+    const targets = (paths ?? []).filter((p) => dirty.has(p))
+    if (!targets.length) return { committed: false, reason: '指定文件无未提交变更', files: [] }
+    this.git('add', '--', ...targets)
+    this.git('commit', '-qm', message)
+    this._bump()
+    return { committed: true, commitId: this.git('rev-parse', '--short', 'HEAD'), branch: this.currentBranch(), files: targets }
+  }
+
   /** 分支间差异（feature 相对 main 的新增文件，供合并前检查/审计） */
   diffNames(base, head) {
     const out = this.git('diff', '--name-only', `${base}...${head}`)

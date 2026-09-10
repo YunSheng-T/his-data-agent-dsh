@@ -135,6 +135,7 @@ export class TenantRepoProvider {
   status() { return this.repo.status() }
   isClean() { return this.repo.isClean() }
   commitAll(...a) { return this.repo.commitAll(...a) }
+  commitPaths(...a) { return this.repo.commitPaths(...a) }
   add(...a) { return this.repo.add(...a) }
   diffNames(...a) { return this.repo.diffNames(...a) }
   git(...a) { return this.repo.git(...a) }
